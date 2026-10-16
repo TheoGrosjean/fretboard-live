@@ -61,16 +61,17 @@ async function loadPlaylists() {
 }
 
 // Playlist ouverte : liste de ses morceaux
-const opened = ref(null) // { playlist, tracks, loading }
+const opened = ref(null) // { playlist, tracks, loading, locked }
 async function openPlaylist(p) {
-  opened.value = { playlist: p, tracks: [], loading: true }
+  opened.value = { playlist: p, tracks: [], loading: true, locked: false }
+  let tracks = []
+  let locked = false
   try {
-    const tracks = await sp.playlistTracks(p.id)
-    if (opened.value?.playlist.id === p.id) opened.value = { playlist: p, tracks, loading: false }
-  } catch (e) {
-    sp.error.value = e.message
-    opened.value = null
+    tracks = await sp.playlistTracks(p.id)
+  } catch {
+    locked = true // contenu refusé par Spotify (playlist d'un autre compte) : on peut quand même la lancer
   }
+  if (opened.value?.playlist.id === p.id) opened.value = { playlist: p, tracks, loading: false, locked }
 }
 watch(tab, () => (opened.value = null))
 
@@ -200,7 +201,7 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
           <div class="min-w-0 flex-1">
             <div class="truncate font-semibold text-neutral-100">{{ opened.playlist.name }}</div>
             <div class="truncate text-xs text-neutral-500">
-              {{ opened.loading ? 'Chargement…' : `${opened.tracks.length} morceaux` }}<template v-if="opened.playlist.owner?.display_name"> · {{ opened.playlist.owner.display_name }}</template>
+              {{ opened.loading ? 'Chargement…' : opened.locked ? 'Playlist' : `${opened.tracks.length} morceaux` }}<template v-if="opened.playlist.owner?.display_name"> · {{ opened.playlist.owner.display_name }}</template>
             </div>
           </div>
           <button
@@ -222,7 +223,11 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
               <span class="text-xs text-neutral-600 tabular-nums">{{ formatTime(t.duration_ms) }}</span>
             </button>
           </li>
-          <li v-if="!opened.loading && !opened.tracks.length" class="py-4 text-center text-sm text-neutral-600">Aucun morceau lisible dans cette playlist.</li>
+          <li v-if="opened.locked" class="px-4 py-6 text-center text-sm text-neutral-500">
+            Spotify ne laisse voir le contenu que de tes propres playlists.<br />
+            Tu peux quand même la lancer avec <span class="text-[#1DB954]">Tout lire</span>.
+          </li>
+          <li v-else-if="!opened.loading && !opened.tracks.length" class="py-4 text-center text-sm text-neutral-600">Aucun morceau lisible dans cette playlist.</li>
         </ul>
       </div>
 

@@ -181,17 +181,29 @@ export function useSpotify() {
     return data.items.filter(Boolean)
   }
 
-  /** Morceaux d'une playlist (les épisodes de podcast et les titres indisponibles sont écartés). */
+  /**
+   * Morceaux d'une playlist (les épisodes de podcast et les titres indisponibles sont écartés).
+   * Depuis 2026, la route est /items (l'ancienne /tracks ne répond plus pour les apps en mode développement),
+   * et Spotify ne la sert que pour les playlists que tu possèdes ou dont tu es collaborateur.
+   */
   async function playlistTracks(id) {
     const tracks = []
-    let path = `/playlists/${id}/tracks?limit=100`
+    let path = `/playlists/${id}/items?limit=100`
+    let data
+    try {
+      data = await api(path)
+    } catch {
+      path = `/playlists/${id}/tracks?limit=100` // ancienne route, au cas où
+      data = null
+    }
     while (path && tracks.length < 500) {
-      const data = await api(path)
+      data ??= await api(path)
       for (const it of data.items ?? []) {
         const t = it?.track ?? it?.item
         if (t?.type === 'track' && t.uri && !t.is_local) tracks.push(t)
       }
       path = data.next ? data.next.replace('https://api.spotify.com/v1', '') : null
+      data = null
     }
     return tracks
   }
