@@ -19,7 +19,8 @@ const NUT_X = 104
 const END_X = WIDTH - 20
 const TOP = 46
 const SPACING = 54
-const R = 20 // rayon des pastilles de notes
+const TAG_W = 38 // étiquettes de notes
+const TAG_H = 28
 const EDGE = 26 // débord du bois au-delà des cordes extrêmes
 
 const stringCount = computed(() => props.tuning.length)
@@ -127,17 +128,12 @@ const isWound = (s) => s >= 3
           <stop offset="0" stop-color="#ffffff" />
           <stop offset="1" stop-color="#9aa0a8" />
         </linearGradient>
-        <!-- Halo néon des anneaux de notes -->
-        <filter id="neon" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="3.5" result="b" />
-          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+        <!-- Ombre plus marquée pour la note jouée -->
+        <filter id="lift" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.75" />
         </filter>
         <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
           <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.6" />
-        </filter>
-        <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
-          <feGaussianBlur stdDeviation="7" result="b" />
-          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
       </defs>
 
@@ -209,26 +205,27 @@ const isWound = (s) => s >= 3
         {{ f }}
       </text>
 
-      <!-- Notes -->
-      <g v-for="c in cells" :key="c.key" class="cursor-pointer" @click="emit('play', { string: c.string, fret: c.fret, midi: c.midi })">
-        <rect :x="c.x - R - 6" :y="c.y - SPACING / 2" :width="R * 2 + 12" :height="SPACING" fill="transparent" />
+      <!-- Notes : étiquettes arrondies -->
+      <g v-for="c in cells" :key="c.key" class="note-cell cursor-pointer" @click="emit('play', { string: c.string, fret: c.fret, midi: c.midi })">
+        <rect :x="c.x - TAG_W / 2 - 6" :y="c.y - SPACING / 2" :width="TAG_W + 12" :height="SPACING" fill="transparent" />
 
-        <!-- Note jouée -->
-        <!-- Note jouée : l'anneau se remplit et brille -->
-        <g v-if="isPlayed(c)" filter="url(#glow)">
-          <circle
-            :cx="c.x"
-            :cy="c.y"
-            :r="R + 4"
-            stroke-width="3"
-            :class="playedOutside ? 'fill-rose-500 stroke-rose-200' : c.info?.isRoot ? 'fill-amber-400 stroke-amber-100' : 'fill-emerald-400 stroke-emerald-100'"
+        <!-- Note jouée : étiquette agrandie et colorée, qui ressort du bois -->
+        <g v-if="isPlayed(c)" filter="url(#lift)">
+          <rect
+            :x="c.x - TAG_W / 2 - 4"
+            :y="c.y - TAG_H / 2 - 3"
+            :width="TAG_W + 8"
+            :height="TAG_H + 6"
+            rx="9"
+            :class="playedOutside ? 'fill-rose-500' : c.info?.isRoot ? 'fill-amber-400' : 'fill-emerald-500'"
           />
           <text
             :x="c.x"
             :y="c.y + 6"
             text-anchor="middle"
-            class="pointer-events-none fill-neutral-950 font-black"
-            :font-size="fontSize(label(c.midi, c.info), 18)"
+            class="pointer-events-none font-black"
+            :class="!playedOutside && c.info?.isRoot ? 'fill-amber-950' : 'fill-white'"
+            :font-size="fontSize(label(c.midi, c.info), 17)"
           >
             {{ label(c.midi, c.info) }}
           </text>
@@ -236,14 +233,16 @@ const isWound = (s) => s >= 3
 
         <!-- Autres positions possibles de la note jouée -->
         <g v-else-if="isAlternate(c)">
-          <circle
-            :cx="c.x"
-            :cy="c.y"
-            :r="R"
-            fill="#0b0d12"
+          <rect
+            :x="c.x - TAG_W / 2"
+            :y="c.y - TAG_H / 2"
+            :width="TAG_W"
+            :height="TAG_H"
+            rx="8"
+            fill="#1c1917"
             fill-opacity="0.85"
-            stroke-dasharray="5 4"
-            stroke-width="2.5"
+            stroke-dasharray="4 3"
+            stroke-width="2"
             :class="playedOutside ? 'stroke-rose-400' : 'stroke-emerald-400'"
           />
           <text
@@ -252,48 +251,54 @@ const isWound = (s) => s >= 3
             text-anchor="middle"
             class="pointer-events-none font-bold"
             :class="playedOutside ? 'fill-rose-300' : 'fill-emerald-300'"
-            :font-size="fontSize(label(c.midi, c.info), 15)"
+            :font-size="fontSize(label(c.midi, c.info), 14)"
           >
             {{ label(c.midi, c.info) }}
           </text>
         </g>
 
-        <!-- Notes de la gamme / arpège -->
-        <!-- Anneau néon sur fond d'ébène (masque la corde derrière le texte) -->
-        <g v-else-if="c.info" filter="url(#neon)" class="neon-note">
-          <circle
-            :cx="c.x"
-            :cy="c.y"
-            :r="R"
-            fill="#0d0b09"
-            fill-opacity="0.9"
-            :stroke-width="c.info.isRoot ? 3 : 2"
-            :class="c.info.isRoot ? 'stroke-amber-400' : 'stroke-cyan-300'"
+        <!-- Notes de la gamme / arpège : tonique ambre, autres notes gris chaud -->
+        <g v-else-if="c.info" filter="url(#shadow)" class="tag">
+          <rect
+            :x="c.x - TAG_W / 2"
+            :y="c.y - TAG_H / 2"
+            :width="TAG_W"
+            :height="TAG_H"
+            rx="8"
+            :class="c.info.isRoot ? 'fill-amber-400' : 'fill-stone-600'"
           />
           <text
             :x="c.x"
             :y="c.y + 5"
             text-anchor="middle"
             class="pointer-events-none font-bold"
-            :class="c.info.isRoot ? 'fill-amber-300' : 'fill-cyan-100'"
-            :font-size="fontSize(label(c.midi, c.info), 15)"
+            :class="c.info.isRoot ? 'fill-amber-950' : 'fill-stone-50'"
+            :font-size="fontSize(label(c.midi, c.info), 14)"
           >
             {{ label(c.midi, c.info) }}
           </text>
         </g>
 
         <!-- Survol -->
-        <circle v-else :cx="c.x" :cy="c.y" :r="R - 3" class="fill-white/0 transition-colors hover:fill-white/15" />
+        <rect
+          v-else
+          :x="c.x - TAG_W / 2"
+          :y="c.y - TAG_H / 2"
+          :width="TAG_W"
+          :height="TAG_H"
+          rx="8"
+          class="fill-white/0 transition-colors hover:fill-white/15"
+        />
       </g>
     </svg>
   </div>
 </template>
 
 <style scoped>
-.neon-note {
+.tag {
   transition: opacity 0.15s;
 }
-g:hover > .neon-note {
-  opacity: 0.75;
+.note-cell:hover .tag {
+  opacity: 0.8;
 }
 </style>

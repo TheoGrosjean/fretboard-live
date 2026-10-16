@@ -389,11 +389,11 @@ function toggleAudio() {
       />
       <div class="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 text-xs text-neutral-500">
         <div class="flex flex-wrap items-center gap-4">
-          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full ring-2 ring-amber-400 shadow-[0_0_6px] shadow-amber-400" /> Tonique</span>
-          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full ring-2 ring-cyan-300 shadow-[0_0_6px] shadow-cyan-300" /> Gamme</span>
-          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-emerald-400" /> Jouée</span>
-          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-rose-500" /> Hors gamme</span>
-          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full border-2 border-dashed border-emerald-400" /> Même note ailleurs</span>
+          <span class="flex items-center gap-1.5"><span class="h-3 w-4 rounded-[3px] bg-amber-400" /> Tonique</span>
+          <span class="flex items-center gap-1.5"><span class="h-3 w-4 rounded-[3px] bg-stone-600" /> Gamme</span>
+          <span class="flex items-center gap-1.5"><span class="h-3 w-4 rounded-[3px] bg-emerald-500" /> Jouée</span>
+          <span class="flex items-center gap-1.5"><span class="h-3 w-4 rounded-[3px] bg-rose-500" /> Hors gamme</span>
+          <span class="flex items-center gap-1.5"><span class="h-3 w-4 rounded-[3px] border-2 border-dashed border-emerald-400" /> Même note ailleurs</span>
           <span class="flex items-center gap-1.5"><span class="h-3 w-5 rounded-sm bg-white/15" /> Position de la main</span>
         </div>
         <span class="text-neutral-600">Clique sur une case pour indiquer où se trouve ta main.</span>
