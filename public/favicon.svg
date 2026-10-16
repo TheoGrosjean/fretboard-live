@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Fretboard Live : bout de manche en ébène, une note tonique cuivre -->
+  <rect width="64" height="64" rx="14" fill="#1e1e1e"/>
+  <rect x="6" y="12" width="52" height="40" rx="4" fill="#15110e"/>
+  <g stroke="#cfc6bb" stroke-width="2.5">
+    <line x1="22" y1="12" x2="22" y2="52"/>
+    <line x1="44" y1="12" x2="44" y2="52"/>
+  </g>
+  <g stroke="#a8a29e" stroke-linecap="round">
+    <line x1="6" y1="20" x2="58" y2="20" stroke-width="1.5"/>
+    <line x1="6" y1="32" x2="58" y2="32" stroke-width="2"/>
+    <line x1="6" y1="44" x2="58" y2="44" stroke-width="2.5"/>
+  </g>
+  <circle cx="33" cy="32" r="11" fill="#1c1917" stroke="#f0956a" stroke-width="4"/>
+  <circle cx="33" cy="32" r="4" fill="#f0956a"/>
+</svg>
