@@ -4,6 +4,9 @@ import { freqToMidi } from '../lib/music'
 
 const STABLE_FRAMES = 3 // nombre de trames identiques avant de valider une note
 const RELEASE_MS = 120 // silence nécessaire avant de considérer la note terminée
+// Changement de note sans nouvelle attaque (slide, bend, legato) : la note doit tenir plus longtemps,
+// pour ignorer les notes traversées pendant un slide
+const LEGATO_STABLE_MS = 110
 
 // Échelles en décibels : l'oreille (et le signal d'une guitare) suit une loi logarithmique
 const METER_MIN_DB = -80 // bas du vu-mètre
@@ -50,6 +53,8 @@ export function useAudioInput({ onNote } = {}) {
 
   let candidate = null
   let candidateCount = 0
+  let candidateSince = 0
+  let attackPending = false // une attaque a eu lieu depuis la dernière note émise
   let lastSoundAt = 0
   let smoothedRms = 0
 
@@ -148,6 +153,7 @@ export function useAudioInput({ onNote } = {}) {
     // Attaque : forte hausse du volume => nouvelle note même si identique
     const attack = rms > smoothedRms * 1.8 && rms > threshold.value * 2
     smoothedRms = smoothedRms * 0.8 + rms * 0.2
+    if (attack) attackPending = true
 
     const result = rms > threshold.value ? detect(buffer) : null
     if (!result) {
@@ -171,12 +177,20 @@ export function useAudioInput({ onNote } = {}) {
     else {
       candidate = rounded
       candidateCount = 1
+      candidateSince = now
     }
 
-    if (candidateCount >= STABLE_FRAMES) {
-      const isNew = !current.value || current.value.midi !== rounded || attack
+    const previous = current.value
+    // Note attaquée (ou première note après un silence) : validation rapide ; sinon on attend qu'elle tienne
+    const legato = Boolean(previous) && !attackPending
+    const stable = legato ? candidateCount >= STABLE_FRAMES && now - candidateSince >= LEGATO_STABLE_MS : candidateCount >= STABLE_FRAMES
+    if (stable) {
+      const isNew = !previous || previous.midi !== rounded || attack
       current.value = { midi: rounded, freq: result.freq, cents: (m - rounded) * 100 }
-      if (isNew) onNote?.(current.value)
+      if (isNew) {
+        onNote?.({ ...current.value, legato })
+        attackPending = false
+      }
     }
   }
 

@@ -19,8 +19,9 @@ const props = defineProps({
 })
 const emit = defineEmits(['play'])
 
-const WIDTH = 1500
-const NUT_X = 104
+const WIDTH = 1560
+const NUT_X = 200 // laisse la place à la tête de la guitare, à gauche du sillet
+const HEAD_X = 8 // bout de la tête
 const END_X = WIDTH - 20
 const TOP = 46
 const SPACING = 54
@@ -61,7 +62,7 @@ const cells = computed(() => {
 })
 
 const playedInfo = computed(() => (props.played ? props.overlay.get(pitchClass(props.played.midi)) : null))
-const playedOutside = computed(() => props.played && props.overlay.size > 0 && !playedInfo.value)
+const playedOutside = computed(() => props.played && props.overlay.size > 0 && !playedInfo.value && !props.played.glide)
 
 function label(midi, info) {
   if (props.labelMode === 'degree' && info) return info.degree
@@ -100,6 +101,17 @@ const handZone = computed(() => {
   const x1 = from === 0 ? NUT_X : fretX(from)
   return { x: x1, w: fretX(to) - x1 }
 })
+
+// Tête : légèrement évasée vers le bout, extrémité arrondie
+const headPath = computed(() => {
+  const top = woodTop - 4
+  const bottom = woodTop + woodHeight.value + 4
+  const flare = 16
+  const end = HEAD_X
+  return `M ${NUT_X - 8} ${top} L ${end + 40} ${top - flare} Q ${end} ${top - flare} ${end} ${top + 30} L ${end} ${bottom - 30} Q ${end} ${bottom + flare} ${end + 40} ${bottom + flare} L ${NUT_X - 8} ${bottom} Z`
+})
+// Mécaniques en diagonale : la corde grave est la plus proche du sillet
+const postX = (s) => HEAD_X + 40 + s * 17
 
 const stringWidth = (s) => 1.2 + (s / Math.max(1, stringCount.value - 1)) * 2.6
 const isWound = (s) => s >= 3
@@ -157,7 +169,23 @@ const isWound = (s) => s >= 3
         <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
           <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.6" />
         </filter>
+        <!-- Tête : bois sombre verni -->
+        <linearGradient id="head" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#231c17" />
+          <stop offset="0.5" stop-color="#17120e" />
+          <stop offset="1" stop-color="#100c09" />
+        </linearGradient>
+        <!-- Axes des mécaniques chromés -->
+        <radialGradient id="post" cx="0.35" cy="0.3" r="0.8">
+          <stop offset="0" stop-color="#ffffff" />
+          <stop offset="0.5" stop-color="#c5c9cf" />
+          <stop offset="1" stop-color="#6b7078" />
+        </radialGradient>
       </defs>
+
+      <!-- Tête de la guitare -->
+      <path :d="headPath" fill="url(#head)" stroke="#2c2520" stroke-width="1.5" />
+      <path :d="headPath" fill="#fff" filter="url(#grain)" opacity="0.6" />
 
       <!-- Touche en ébène -->
       <rect :x="NUT_X" :y="woodTop" :width="END_X - NUT_X" :height="woodHeight" fill="url(#ebony)" />
@@ -194,7 +222,7 @@ const isWound = (s) => s >= 3
         <line
           v-for="(open, s) in tuning"
           :key="'s' + s"
-          :x1="NUT_X - 62"
+          :x1="postX(s)"
           :x2="END_X"
           :y1="stringY(s)"
           :y2="stringY(s)"
@@ -203,16 +231,14 @@ const isWound = (s) => s >= 3
         />
       </g>
 
-      <!-- Nom des cordes à vide -->
-      <text
-        v-for="(open, s) in tuning"
-        :key="'o' + s"
-        x="12"
-        :y="stringY(s) + 5"
-        class="fill-neutral-400 text-[14px] font-bold"
-      >
-        {{ noteName(open, notation) }}
-      </text>
+      <!-- Mécaniques (axes) et nom des cordes à vide -->
+      <g v-for="(open, s) in tuning" :key="'p' + s">
+        <circle :cx="postX(s)" :cy="stringY(s)" r="8" fill="url(#post)" filter="url(#shadow)" />
+        <circle :cx="postX(s)" :cy="stringY(s)" r="2.5" fill="#2a2a2a" />
+        <text :x="postX(s) - 14" :y="stringY(s) + 5" text-anchor="end" class="fill-neutral-300 text-[13px] font-bold">
+          {{ noteName(open, notation) }}
+        </text>
+      </g>
 
       <!-- Numéros de case -->
       <text

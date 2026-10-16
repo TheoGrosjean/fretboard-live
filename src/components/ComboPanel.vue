@@ -88,15 +88,15 @@ const TONES = {
         :key="n.id"
         class="flex min-w-12 flex-col items-center rounded-md px-2 py-1 ring-1"
         :class="[
-          n.outside ? 'bg-rose-500/10 ring-rose-500/40' : n.info?.isRoot ? 'bg-copper-500/15 ring-copper-400/50' : 'bg-stone-800/60 ring-stone-600/50',
+          n.glide ? 'bg-transparent ring-stone-700 border-dashed' : n.outside ? 'bg-rose-500/10 ring-rose-500/40' : n.info?.isRoot ? 'bg-copper-500/15 ring-copper-400/50' : 'bg-stone-800/60 ring-stone-600/50',
           i === 0 ? '' : 'opacity-60',
         ]"
       >
-        <span class="text-sm font-bold" :class="n.outside ? 'text-rose-300' : n.info?.isRoot ? 'text-copper-300' : 'text-stone-100'">
+        <span class="text-sm font-bold" :class="n.glide ? 'text-stone-500' : n.outside ? 'text-rose-300' : n.info?.isRoot ? 'text-copper-300' : 'text-stone-100'">
           {{ noteName(n.midi, notation, true) }}
         </span>
         <span class="text-[10px] text-neutral-500 tabular-nums">
-          <template v-if="n.info">{{ n.info.degree }} · </template>c{{ n.string + 1 }} f{{ n.fret }}
+          <template v-if="n.glide">slide · </template><template v-else-if="n.info">{{ n.info.degree }} · </template>c{{ n.string + 1 }} f{{ n.fret }}
         </span>
       </li>
     </TransitionGroup>

@@ -102,29 +102,37 @@ const history = ref([])
 let historyId = 0
 let clearTimer = 0
 
-function registerNote(midi, forcedPosition = null) {
+let lastPosition = null
+
+function registerNote(midi, forcedPosition = null, legato = false) {
   const candidates = findPositions(midi, tuning, frets.value)
   if (!candidates.length) return
-  const position = forcedPosition ?? estimatePosition(candidates, anchor.value)
+  // Slide / legato : la note reste sur la même corde que la précédente
+  const sameString = legato && lastPosition && candidates.find((c) => c.string === lastPosition.string)
+  const position = forcedPosition ?? sameString ?? estimatePosition(candidates, anchor.value)
   anchor.value = forcedPosition ? { fret: Math.max(1, position.fret), string: position.string } : updateAnchor(anchor.value, position)
-  played.value = { midi, ...position }
+  lastPosition = position
 
   const info = overlay.value.get(pitchClass(midi)) ?? null
+  const events = overlay.value.size ? combo.play({ midi, ...position, info, legato }) : []
+  const glide = events.some((e) => e.type === 'glide') // note de passage d'un slide : pas une erreur
+  played.value = { midi, ...position, glide }
+
   history.value.unshift({
     id: ++historyId,
     midi,
     ...position,
     info,
-    outside: overlay.value.size > 0 && !info,
+    glide,
+    outside: overlay.value.size > 0 && !info && !glide,
   })
   if (history.value.length > 24) history.value.length = 24
-  if (overlay.value.size) combo.play({ midi, ...position, info })
 }
 
 const audio = useAudioInput({
   onNote: (n) => {
     clearTimeout(clearTimer)
-    registerNote(n.midi)
+    registerNote(n.midi, null, n.legato)
   },
 })
 
@@ -403,16 +411,17 @@ function toggleAudio() {
         <div class="flex items-center gap-4 rounded-2xl bg-neutral-900 py-3 pr-3 pl-5 ring-1 ring-white/5">
           <div class="text-right">
             <div class="text-[11px] tracking-widest text-neutral-500 uppercase">Note jouée</div>
-            <div class="text-sm" :class="!played ? 'text-neutral-600' : playedInfo ? 'text-copper-300' : overlay.size ? 'text-rose-400' : 'text-neutral-400'">
+            <div class="text-sm" :class="!played ? 'text-neutral-600' : playedInfo ? 'text-copper-300' : overlay.size && !played.glide ? 'text-rose-400' : 'text-neutral-400'">
               <template v-if="!played">en attente</template>
               <template v-else-if="playedInfo">degré {{ playedInfo.degree }} · corde {{ played.string + 1 }}, case {{ played.fret }}</template>
+              <template v-else-if="played.glide">note de passage · corde {{ played.string + 1 }}, case {{ played.fret }}</template>
               <template v-else-if="overlay.size">hors gamme · corde {{ played.string + 1 }}, case {{ played.fret }}</template>
               <template v-else>corde {{ played.string + 1 }}, case {{ played.fret }}</template>
             </div>
           </div>
           <div
             class="flex h-16 min-w-24 items-center justify-center rounded-xl px-3 text-3xl font-black transition-colors"
-            :class="!played ? 'bg-neutral-800 text-neutral-600' : playedInfo || !overlay.size ? 'bg-copper-500 text-white' : 'bg-rose-500 text-white'"
+            :class="!played ? 'bg-neutral-800 text-neutral-600' : playedInfo || !overlay.size ? 'bg-copper-500 text-white' : played.glide ? 'bg-neutral-700 text-neutral-300' : 'bg-rose-500 text-white'"
           >
             {{ played ? noteName(played.midi, notation, true) : '—' }}
           </div>

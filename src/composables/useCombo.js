@@ -81,9 +81,12 @@ export function useCombo({ scaleKey, scaleSize }) {
     }
   }
 
+  /** Renvoie les événements, pour que l'appelant sache si la note était une note de passage ('glide'). */
   function play(note) {
     lastNoteAt.value = performance.now()
-    handle(playNote(run, note, scaleSize.value, lastNoteAt.value))
+    const events = playNote(run, note, scaleSize.value, lastNoteAt.value)
+    handle(events)
+    return events
   }
 
   function reset() {

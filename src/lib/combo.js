@@ -9,6 +9,8 @@
  *  - bonus d'exploration (nouvelle position sur le manche), de gamme complète et de résolution
  *    (phrase terminée sur la tonique suivie d'un silence)
  *  - le combo se perd après quelques secondes sans jouer
+ *  - slides / bends / legato : une note hors gamme jouée sans attaque, à 1–2 demi-tons de la précédente,
+ *    est une note de passage — ni erreur, ni comptée dans la précision
  */
 
 export const TIERS = [0, 10, 25, 50] // combo nécessaire pour ×1, ×2, ×3, ×4
@@ -17,6 +19,7 @@ export const DECAY_MS = 5000 // silence avant la perte du combo
 export const PHRASE_GAP_MS = 1200 // silence qui marque la fin d'une phrase
 export const MAX_REPEATS = 2
 export const ALLOWED_MISSES = 1 // fausses notes d'affilée tolérées
+export const GLIDE_SEMITONES = 2 // écart maximal d'une note de passage avec la note précédente
 
 const POINTS = { note: 10, explore: 5, fullScale: 100, resolution: 50 }
 
@@ -39,6 +42,7 @@ export function createRun() {
     hits: 0, // notes dans la gamme
     misses: 0, // fausses notes d'affilée
     lastMidi: null,
+    prevMidi: null, // dernière note entendue, même de passage (pour enchaîner un slide)
     repeats: 0,
     lastAt: 0,
     lastWasRoot: false,
@@ -61,12 +65,18 @@ function breakCombo(run, reason) {
 
 /**
  * Une note jouée.
- * note : { midi, string, fret, info } — info = degré dans la gamme, ou null si hors gamme
+ * note : { midi, string, fret, info, legato } — info = degré dans la gamme, ou null si hors gamme ;
+ *        legato = la note est arrivée sans nouvelle attaque (slide, bend, hammer-on…)
  * scaleSize : nombre de notes de la gamme (pour « gamme complète »)
  */
-export function playNote(run, { midi, string, fret, info }, scaleSize, now) {
-  run.notes++
+export function playNote(run, { midi, string, fret, info, legato = false }, scaleSize, now) {
+  const prevMidi = run.prevMidi
+  run.prevMidi = midi
   run.lastAt = now
+
+  if (!info && legato && prevMidi !== null && Math.abs(midi - prevMidi) <= GLIDE_SEMITONES) return [{ type: 'glide' }]
+
+  run.notes++
 
   if (!info) {
     run.misses++
