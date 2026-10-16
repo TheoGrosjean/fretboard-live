@@ -13,13 +13,12 @@ import {
   SCALES,
   STANDARD_TUNING,
   buildOverlay,
-  estimatePosition,
   findPositions,
   noteName,
   pitchClass,
-  updateAnchor,
 } from './lib/music'
 import { keyFromTitle } from './lib/keyFromTitle'
+import { PHRASE_GAP_MS, PHRASE_LENGTH, REVISABLE, bestFingering, handFrom, rootBox } from './lib/fingering'
 
 // ---------- Réglages persistés ----------
 function persisted(key, initial) {
@@ -102,21 +101,48 @@ const history = ref([])
 let historyId = 0
 let clearTimer = 0
 
-let lastPosition = null
+// ---------- Position sur le manche ----------
+// La corde / case de chaque note est choisie sur toute la phrase en cours (doigté le plus jouable,
+// voir lib/fingering.js) : les dernières notes peuvent être replacées quand la suite lève le doute.
+let phrase = [] // [{ candidates, legato, position, item }] — item : entrée d'historique à corriger
+let settled = [] // positions sorties de la phrase (pour situer la main au début de la suivante)
+let lastNoteAt = 0
+
+function placeNote(midi, forcedPosition, legato) {
+  const candidates = forcedPosition ? [forcedPosition] : findPositions(midi, tuning, frets.value)
+  if (!candidates.length) return null
+
+  // Un silence termine la phrase ; au-delà de PHRASE_LENGTH notes, les plus anciennes sont figées
+  const now = performance.now()
+  if (now - lastNoteAt > PHRASE_GAP_MS) settled.push(...phrase.splice(0).map((n) => n.position))
+  lastNoteAt = now
+  const note = { candidates, legato, position: null, item: null }
+  phrase.push(note)
+  if (phrase.length > PHRASE_LENGTH) settled.push(...phrase.splice(0, phrase.length - PHRASE_LENGTH).map((n) => n.position))
+  settled = settled.slice(-4)
+
+  const path = bestFingering(phrase, handFrom(settled), rootBox(root.value))
+  phrase.forEach((n, i) => {
+    const moved = n.position && (n.position.string !== path[i].string || n.position.fret !== path[i].fret)
+    n.position = path[i]
+    // Correction après coup des notes récentes (historique et note affichée)
+    if (moved && i >= phrase.length - REVISABLE && n.item) {
+      Object.assign(n.item, path[i])
+      if (played.value?.id === n.item.id) played.value = { ...played.value, ...path[i] }
+    }
+  })
+  anchor.value = handFrom(phrase.map((n) => n.position))
+  return note
+}
 
 function registerNote(midi, forcedPosition = null, legato = false) {
-  const candidates = findPositions(midi, tuning, frets.value)
-  if (!candidates.length) return
-  // Slide / legato : la note reste sur la même corde que la précédente
-  const sameString = legato && lastPosition && candidates.find((c) => c.string === lastPosition.string)
-  const position = forcedPosition ?? sameString ?? estimatePosition(candidates, anchor.value)
-  anchor.value = forcedPosition ? { fret: Math.max(1, position.fret), string: position.string } : updateAnchor(anchor.value, position)
-  lastPosition = position
+  const note = placeNote(midi, forcedPosition, legato)
+  if (!note) return
+  const position = note.position
 
   const info = overlay.value.get(pitchClass(midi)) ?? null
   const events = overlay.value.size ? combo.play({ midi, ...position, info, legato }) : []
   const glide = events.some((e) => e.type === 'glide') // note de passage d'un slide : pas une erreur
-  played.value = { midi, ...position, glide }
 
   history.value.unshift({
     id: ++historyId,
@@ -126,6 +152,8 @@ function registerNote(midi, forcedPosition = null, legato = false) {
     glide,
     outside: overlay.value.size > 0 && !info && !glide,
   })
+  note.item = history.value[0]
+  played.value = { id: historyId, midi, ...position, glide }
   if (history.value.length > 24) history.value.length = 24
 }
 

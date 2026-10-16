@@ -90,38 +90,3 @@ export function findPositions(midi, tuning, frets) {
   })
   return positions
 }
-
-/**
- * Choisit la position la plus probable en fonction de la position de la main.
- * anchor = { fret, string } lissé sur les dernières notes jouées.
- */
-export function estimatePosition(candidates, anchor) {
-  if (!candidates.length) return null
-  const ref = anchor ?? { fret: 3, string: 3 }
-  let best = null
-  let bestCost = Infinity
-  for (const c of candidates) {
-    let fretDist = Math.abs(c.fret - ref.fret)
-    // Une corde à vide est facile à jouer si la main est en bas du manche
-    if (c.fret === 0) fretDist = ref.fret <= 5 ? 1.5 : ref.fret
-    // Une main couvre environ 4 cases : on pénalise davantage au-delà
-    const stretch = Math.max(0, fretDist - 3) * 1.5
-    const cost = fretDist + stretch + Math.abs(c.string - ref.string) * 0.35
-    if (cost < bestCost) {
-      bestCost = cost
-      best = c
-    }
-  }
-  return best
-}
-
-export function updateAnchor(anchor, position) {
-  if (!position) return anchor
-  if (!anchor) return { fret: Math.max(position.fret, 1), string: position.string }
-  const a = 0.45
-  return {
-    // Les cordes à vide ne déplacent pas la main
-    fret: position.fret === 0 ? anchor.fret : anchor.fret * (1 - a) + position.fret * a,
-    string: anchor.string * (1 - a) + position.string * a,
-  }
-}
