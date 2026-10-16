@@ -15,6 +15,7 @@ const props = defineProps({
   anchor: { type: Object, default: null },
   palette: { type: String, default: DEFAULT_PALETTE }, // voir lib/noteStyles.js
   bodyFinish: { type: String, default: DEFAULT_BODY_FINISH }, // couleur unie du corps
+  matchHead: { type: Boolean, default: false }, // tête laquée de la couleur du corps
   focus: { type: Set, default: null }, // positions 'corde-case' de la box choisie ; les autres notes sont estompées
   heat: { type: Number, default: 0 }, // 0–3 : intensité du halo selon le multiplicateur de combo
   brokeAt: { type: Number, default: 0 }, // change quand le combo casse -> secousse
@@ -93,6 +94,13 @@ function label(midi, info) {
 
 const colors = computed(() => findPalette(props.palette))
 const bodyColor = computed(() => findBodyFinish(props.bodyFinish).color)
+// Finition claire : logo de la tête en foncé pour rester lisible
+const lightHead = computed(() => {
+  if (!props.matchHead) return false
+  const hex = bodyColor.value.slice(1)
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16))
+  return 0.299 * r + 0.587 * g + 0.114 * b > 140
+})
 
 // Halo autour du manche selon le multiplicateur (classes littérales pour Tailwind)
 const GLOW = [
@@ -294,11 +302,17 @@ const isWound = (s) => s >= 3
 
       <!-- Tête de la guitare (s'efface vers la gauche) -->
       <g mask="url(#head-fade)">
-        <path :d="headPath" fill="url(#head)" stroke="#5a5048" stroke-width="2" />
-        <path :d="headPath" fill="#fff" filter="url(#grain)" opacity="0.6" />
+        <template v-if="matchHead">
+          <path :d="headPath" :fill="bodyColor" stroke="#fff" stroke-opacity="0.28" stroke-width="2" />
+          <path :d="headPath" fill="url(#body-sheen)" />
+        </template>
+        <template v-else>
+          <path :d="headPath" fill="url(#head)" stroke="#5a5048" stroke-width="2" />
+          <path :d="headPath" fill="#fff" filter="url(#grain)" opacity="0.6" />
+        </template>
         <!-- Logo -->
         <g :transform="`translate(${logo.x} ${logo.y}) rotate(${logo.angle})`">
-          <text text-anchor="middle" class="fill-stone-300/70 font-black italic" font-size="18" letter-spacing="-0.5">Fretboard</text>
+          <text text-anchor="middle" :class="lightHead ? 'fill-stone-800/80' : 'fill-stone-300/70'" class="font-black italic" font-size="18" letter-spacing="-0.5">Fretboard</text>
           <text y="14" text-anchor="middle" class="fill-copper-400/70 font-bold tracking-[0.35em]" font-size="8">LIVE</text>
         </g>
         <!-- Cordes en éventail du sillet aux mécaniques -->

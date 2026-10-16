@@ -45,6 +45,7 @@ const labelMode = persisted('labelMode', 'note')
 const frets = persisted('frets', 22)
 const showAlternates = persisted('showAlternates', true)
 const bodyFinish = persisted('bodyFinish', DEFAULT_BODY_FINISH)
+const matchHead = persisted('matchHead', false)
 const boxIndex = persisted('boxIndex', 0) // 0 = tout le manche, sinon numéro de la box
 
 const tuning = STANDARD_TUNING
@@ -503,6 +504,10 @@ function toggleAudio() {
                   @click="bodyFinish = f.id"
                 />
               </div>
+              <label class="mt-2 flex cursor-pointer items-center gap-2">
+                <input v-model="matchHead" type="checkbox" class="size-4 accent-copper-400" />
+                <span class="text-sm text-neutral-300">Tête assortie au corps</span>
+              </label>
             </div>
 
             <div class="grid grid-cols-2 items-end gap-3">
@@ -583,6 +588,7 @@ function toggleAudio() {
           :notation="notation"
           :label-mode="labelMode"
           :body-finish="bodyFinish"
+          :match-head="matchHead"
           :played="played"
           :alternates="alternates"
           :anchor="anchor"
