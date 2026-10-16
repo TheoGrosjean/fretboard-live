@@ -23,11 +23,11 @@ defineEmits(['clear'])
         :key="n.id"
         class="flex min-w-14 flex-col items-center rounded-lg px-2.5 py-1.5 ring-1"
         :class="[
-          n.outside ? 'bg-rose-500/10 ring-rose-500/40' : n.info?.isRoot ? 'bg-amber-400/10 ring-amber-400/40' : 'bg-emerald-400/10 ring-emerald-400/30',
+          n.outside ? 'bg-rose-500/10 ring-rose-500/40' : n.info?.isRoot ? 'bg-copper-500/15 ring-copper-400/50' : 'bg-stone-800/60 ring-stone-600/50',
           i === 0 ? '' : 'opacity-70',
         ]"
       >
-        <span class="text-base font-bold" :class="n.outside ? 'text-rose-300' : n.info?.isRoot ? 'text-amber-300' : 'text-emerald-300'">
+        <span class="text-base font-bold" :class="n.outside ? 'text-rose-300' : n.info?.isRoot ? 'text-copper-300' : 'text-stone-100'">
           {{ noteName(n.midi, notation, true) }}
         </span>
         <span class="text-[10px] text-neutral-500 tabular-nums">

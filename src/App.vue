@@ -133,7 +133,7 @@ function toggleAudio() {
       <!-- Logo + bouton replier -->
       <div class="flex h-16 shrink-0 items-center border-b border-white/5" :class="sidebarOpen ? 'justify-between px-5' : 'justify-center'">
         <h1 v-if="sidebarOpen" class="text-lg font-black tracking-tight whitespace-nowrap text-white">
-          Fretboard <span class="text-emerald-400">Live</span>
+          Fretboard <span class="text-copper-400">Live</span>
         </h1>
         <button
           class="rounded-lg p-2 text-neutral-500 transition hover:bg-white/5 hover:text-neutral-200"
@@ -148,20 +148,20 @@ function toggleAudio() {
       <nav v-if="!sidebarOpen" class="flex flex-col items-center gap-2 py-4">
         <button
           class="relative flex size-11 items-center justify-center rounded-xl transition"
-          :class="audio.running.value ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25' : 'bg-emerald-500 text-neutral-950 hover:bg-emerald-400'"
+          :class="audio.running.value ? 'bg-copper-500/15 text-copper-400 hover:bg-copper-500/25' : 'bg-copper-500 text-neutral-950 hover:bg-copper-400'"
           :title="audio.running.value ? 'Arrêter l’écoute' : 'Démarrer l’écoute'"
           @click="toggleAudio"
         >
           <Icon :name="audio.running.value ? 'stop' : 'play'" class="size-5" />
-          <span v-if="audio.running.value" class="absolute top-1.5 right-1.5 size-2 animate-pulse rounded-full bg-emerald-400" />
+          <span v-if="audio.running.value" class="absolute top-1.5 right-1.5 size-2 animate-pulse rounded-full bg-copper-400" />
         </button>
         <!-- Mini vu-mètre vertical -->
         <div v-if="audio.running.value" class="relative h-16 w-1.5 overflow-hidden rounded-full bg-neutral-800">
-          <div class="absolute bottom-0 w-full rounded-full bg-linear-to-t from-emerald-500 via-lime-400 to-rose-500" :style="{ height: audio.level.value * 100 + '%' }" />
+          <div class="absolute bottom-0 w-full rounded-full bg-linear-to-t from-copper-500 via-copper-400 to-rose-500" :style="{ height: audio.level.value * 100 + '%' }" />
         </div>
         <div class="my-2 h-px w-8 bg-white/5" />
         <button class="rail-btn" title="Gamme / arpège" @click="sidebarOpen = true">
-          <span class="text-xs font-bold text-amber-300">{{ pattern ? NOTE_NAMES[notation][root] : '—' }}</span>
+          <span class="text-xs font-bold text-copper-300">{{ pattern ? NOTE_NAMES[notation][root] : '—' }}</span>
         </button>
         <button class="rail-btn" title="Entrée audio" @click="sidebarOpen = true"><Icon name="mic" class="size-5" /></button>
         <button class="rail-btn" title="Affichage" @click="sidebarOpen = true"><Icon name="sliders" class="size-5" /></button>
@@ -194,7 +194,7 @@ function toggleAudio() {
                 :key="i"
                 :disabled="overlayType === 'none'"
                 class="rounded-md py-1.5 text-xs font-semibold transition disabled:opacity-30"
-                :class="root === i ? 'bg-amber-400 text-neutral-950' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
+                :class="root === i ? 'bg-copper-500 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
                 @click="root = i"
               >
                 {{ n }}
@@ -214,8 +214,8 @@ function toggleAudio() {
         <section>
           <h2 class="section-title">
             <Icon name="mic" class="size-4" /> Entrée audio
-            <span class="ml-auto flex items-center gap-1.5 text-[11px] font-normal tracking-normal normal-case" :class="audio.running.value ? 'text-emerald-400' : 'text-neutral-600'">
-              <span class="size-2 rounded-full" :class="audio.running.value ? 'animate-pulse bg-emerald-400' : 'bg-neutral-700'" />
+            <span class="ml-auto flex items-center gap-1.5 text-[11px] font-normal tracking-normal normal-case" :class="audio.running.value ? 'text-copper-400' : 'text-neutral-600'">
+              <span class="size-2 rounded-full" :class="audio.running.value ? 'animate-pulse bg-copper-400' : 'bg-neutral-700'" />
               {{ audio.running.value ? `${audio.sampleRate.value / 1000} kHz` : 'Arrêté' }}
             </span>
           </h2>
@@ -223,7 +223,7 @@ function toggleAudio() {
           <div class="space-y-3">
             <button
               class="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-semibold transition"
-              :class="audio.running.value ? 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700' : 'bg-emerald-500 text-neutral-950 hover:bg-emerald-400'"
+              :class="audio.running.value ? 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700' : 'bg-copper-500 text-neutral-950 hover:bg-copper-400'"
               @click="toggleAudio"
             >
               <Icon :name="audio.running.value ? 'stop' : 'play'" class="size-4" />
@@ -258,7 +258,7 @@ function toggleAudio() {
                 min="0"
                 max="100"
                 step="1"
-                class="w-full accent-emerald-400"
+                class="w-full accent-copper-400"
                 :value="audio.sensitivity.value"
                 @input="audio.setSensitivity(Number($event.target.value))"
               />
@@ -267,7 +267,7 @@ function toggleAudio() {
             <!-- Vu-mètre -->
             <div class="relative h-2 overflow-hidden rounded-full bg-neutral-800">
               <div
-                class="h-full rounded-full bg-linear-to-r from-emerald-500 via-lime-400 to-rose-500 transition-[width] duration-75"
+                class="h-full rounded-full bg-linear-to-r from-copper-500 via-copper-400 to-rose-500 transition-[width] duration-75"
                 :style="{ width: audio.level.value * 100 + '%' }"
               />
               <div class="absolute top-0 h-full w-0.5 bg-white/60" :style="{ left: audio.thresholdLevel.value * 100 + '%' }" />
@@ -325,7 +325,7 @@ function toggleAudio() {
                 </select>
               </label>
               <label class="flex cursor-pointer items-center gap-2 pb-2">
-                <input v-model="showAlternates" type="checkbox" class="size-4 accent-emerald-400" />
+                <input v-model="showAlternates" type="checkbox" class="size-4 accent-copper-400" />
                 <span class="text-sm text-neutral-300">Autres positions</span>
               </label>
             </div>
@@ -348,7 +348,7 @@ function toggleAudio() {
               v-for="i in pattern.intervals"
               :key="i"
               class="rounded-md px-2 py-0.5 text-xs font-semibold"
-              :class="i === 0 ? 'bg-amber-400/20 text-amber-300' : 'bg-neutral-800 text-neutral-300'"
+              :class="i === 0 ? 'bg-copper-500/20 text-copper-300' : 'bg-neutral-800 text-neutral-300'"
             >
               {{ NOTE_NAMES[notation][(root + i) % 12] }}
               <span class="text-neutral-500">{{ overlay.get((root + i) % 12)?.degree }}</span>
@@ -359,7 +359,7 @@ function toggleAudio() {
         <div class="flex items-center gap-4 rounded-2xl bg-neutral-900 py-3 pr-3 pl-5 ring-1 ring-white/5">
           <div class="text-right">
             <div class="text-[11px] tracking-widest text-neutral-500 uppercase">Note jouée</div>
-            <div class="text-sm" :class="!played ? 'text-neutral-600' : playedInfo ? 'text-emerald-400' : overlay.size ? 'text-rose-400' : 'text-neutral-400'">
+            <div class="text-sm" :class="!played ? 'text-neutral-600' : playedInfo ? 'text-copper-300' : overlay.size ? 'text-rose-400' : 'text-neutral-400'">
               <template v-if="!played">en attente</template>
               <template v-else-if="playedInfo">degré {{ playedInfo.degree }} · corde {{ played.string + 1 }}, case {{ played.fret }}</template>
               <template v-else-if="overlay.size">hors gamme · corde {{ played.string + 1 }}, case {{ played.fret }}</template>
@@ -368,7 +368,7 @@ function toggleAudio() {
           </div>
           <div
             class="flex h-16 min-w-24 items-center justify-center rounded-xl px-3 text-3xl font-black transition-colors"
-            :class="!played ? 'bg-neutral-800 text-neutral-600' : playedInfo || !overlay.size ? 'bg-emerald-400 text-neutral-950' : 'bg-rose-500 text-white'"
+            :class="!played ? 'bg-neutral-800 text-neutral-600' : playedInfo || !overlay.size ? 'bg-copper-500 text-white' : 'bg-rose-500 text-white'"
           >
             {{ played ? noteName(played.midi, notation, true) : '—' }}
           </div>
@@ -389,11 +389,11 @@ function toggleAudio() {
       />
       <div class="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 text-xs text-neutral-500">
         <div class="flex flex-wrap items-center gap-4">
-          <span class="flex items-center gap-1.5"><span class="h-3 w-4 rounded-[3px] bg-amber-400" /> Tonique</span>
-          <span class="flex items-center gap-1.5"><span class="h-3 w-4 rounded-[3px] bg-stone-600" /> Gamme</span>
-          <span class="flex items-center gap-1.5"><span class="h-3 w-4 rounded-[3px] bg-emerald-500" /> Jouée</span>
-          <span class="flex items-center gap-1.5"><span class="h-3 w-4 rounded-[3px] bg-rose-500" /> Hors gamme</span>
-          <span class="flex items-center gap-1.5"><span class="h-3 w-4 rounded-[3px] border-2 border-dashed border-emerald-400" /> Même note ailleurs</span>
+          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-stone-900 ring-2 ring-copper-400" /> Tonique</span>
+          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-stone-900 ring-1 ring-stone-500" /> Gamme</span>
+          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-copper-500" /> Jouée</span>
+          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-rose-500" /> Hors gamme</span>
+          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full border-2 border-dashed border-copper-300" /> Même note ailleurs</span>
           <span class="flex items-center gap-1.5"><span class="h-3 w-5 rounded-sm bg-white/15" /> Position de la main</span>
         </div>
         <span class="text-neutral-600">Clique sur une case pour indiquer où se trouve ta main.</span>
@@ -415,7 +415,7 @@ function toggleAudio() {
 @reference "./style.css";
 
 .field {
-  @apply w-full rounded-lg bg-neutral-800 px-3 py-2 text-sm text-neutral-200 ring-1 ring-white/5 outline-none focus:ring-emerald-400/60;
+  @apply w-full rounded-lg bg-neutral-800 px-3 py-2 text-sm text-neutral-200 ring-1 ring-white/5 outline-none focus:ring-copper-400/60;
 }
 .field-label {
   @apply mb-1 block text-xs text-neutral-500;

@@ -1,6 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { noteName, pitchClass } from '../lib/music'
+import { DEFAULT_PALETTE, alternateMark, findPalette, playedMark, scaleMark } from '../lib/noteStyles'
+import NoteMark from './NoteMark.vue'
 
 const props = defineProps({
   tuning: { type: Array, required: true },
@@ -11,6 +13,7 @@ const props = defineProps({
   played: { type: Object, default: null }, // { midi, string, fret }
   alternates: { type: Array, default: () => [] },
   anchor: { type: Object, default: null },
+  palette: { type: String, default: DEFAULT_PALETTE }, // voir lib/noteStyles.js
 })
 const emit = defineEmits(['play'])
 
@@ -19,8 +22,7 @@ const NUT_X = 104
 const END_X = WIDTH - 20
 const TOP = 46
 const SPACING = 54
-const TAG_W = 38 // étiquettes de notes
-const TAG_H = 28
+const NOTE_SIZE = 40 // largeur des notes
 const EDGE = 26 // débord du bois au-delà des cordes extrêmes
 
 const stringCount = computed(() => props.tuning.length)
@@ -63,8 +65,8 @@ function label(midi, info) {
   if (props.labelMode === 'degree' && info) return info.degree
   return noteName(midi, props.notation)
 }
-// Texte un peu réduit pour les noms longs (« Sol# ») afin qu'ils tiennent dans la pastille
-const fontSize = (text, base) => (text.length >= 4 ? base - 2 : base)
+
+const colors = computed(() => findPalette(props.palette))
 
 const isPlayed = (c) => props.played && props.played.string === c.string && props.played.fret === c.fret
 const isAlternate = (c) => props.alternates.some((a) => a.string === c.string && a.fret === c.fret)
@@ -205,100 +207,31 @@ const isWound = (s) => s >= 3
         {{ f }}
       </text>
 
-      <!-- Notes : étiquettes arrondies -->
+      <!-- Notes -->
       <g v-for="c in cells" :key="c.key" class="note-cell cursor-pointer" @click="emit('play', { string: c.string, fret: c.fret, midi: c.midi })">
-        <rect :x="c.x - TAG_W / 2 - 6" :y="c.y - SPACING / 2" :width="TAG_W + 12" :height="SPACING" fill="transparent" />
+        <rect :x="c.x - NOTE_SIZE / 2 - 6" :y="c.y - SPACING / 2" :width="NOTE_SIZE + 12" :height="SPACING" fill="transparent" />
 
-        <!-- Note jouée : étiquette agrandie et colorée, qui ressort du bois -->
-        <g v-if="isPlayed(c)" filter="url(#lift)">
-          <rect
-            :x="c.x - TAG_W / 2 - 4"
-            :y="c.y - TAG_H / 2 - 3"
-            :width="TAG_W + 8"
-            :height="TAG_H + 6"
-            rx="9"
-            :class="playedOutside ? 'fill-rose-500' : c.info?.isRoot ? 'fill-amber-400' : 'fill-emerald-500'"
-          />
-          <text
-            :x="c.x"
-            :y="c.y + 6"
-            text-anchor="middle"
-            class="pointer-events-none font-black"
-            :class="!playedOutside && c.info?.isRoot ? 'fill-amber-950' : 'fill-white'"
-            :font-size="fontSize(label(c.midi, c.info), 17)"
-          >
-            {{ label(c.midi, c.info) }}
-          </text>
-        </g>
+        <!-- Note jouée : pastille agrandie et remplie -->
+        <NoteMark v-if="isPlayed(c)" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="playedMark(colors, { outside: playedOutside })" />
 
         <!-- Autres positions possibles de la note jouée -->
-        <g v-else-if="isAlternate(c)">
-          <rect
-            :x="c.x - TAG_W / 2"
-            :y="c.y - TAG_H / 2"
-            :width="TAG_W"
-            :height="TAG_H"
-            rx="8"
-            fill="#1c1917"
-            fill-opacity="0.85"
-            stroke-dasharray="4 3"
-            stroke-width="2"
-            :class="playedOutside ? 'stroke-rose-400' : 'stroke-emerald-400'"
-          />
-          <text
-            :x="c.x"
-            :y="c.y + 5"
-            text-anchor="middle"
-            class="pointer-events-none font-bold"
-            :class="playedOutside ? 'fill-rose-300' : 'fill-emerald-300'"
-            :font-size="fontSize(label(c.midi, c.info), 14)"
-          >
-            {{ label(c.midi, c.info) }}
-          </text>
-        </g>
+        <NoteMark v-else-if="isAlternate(c)" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="alternateMark(colors, { outside: playedOutside })" />
 
-        <!-- Notes de la gamme / arpège : tonique ambre, autres notes gris chaud -->
-        <g v-else-if="c.info" filter="url(#shadow)" class="tag">
-          <rect
-            :x="c.x - TAG_W / 2"
-            :y="c.y - TAG_H / 2"
-            :width="TAG_W"
-            :height="TAG_H"
-            rx="8"
-            :class="c.info.isRoot ? 'fill-amber-400' : 'fill-stone-600'"
-          />
-          <text
-            :x="c.x"
-            :y="c.y + 5"
-            text-anchor="middle"
-            class="pointer-events-none font-bold"
-            :class="c.info.isRoot ? 'fill-amber-950' : 'fill-stone-50'"
-            :font-size="fontSize(label(c.midi, c.info), 14)"
-          >
-            {{ label(c.midi, c.info) }}
-          </text>
-        </g>
+        <!-- Notes de la gamme / arpège -->
+        <NoteMark v-else-if="c.info" class="mark" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="scaleMark(c.info, label(c.midi, c.info), colors)" />
 
         <!-- Survol -->
-        <rect
-          v-else
-          :x="c.x - TAG_W / 2"
-          :y="c.y - TAG_H / 2"
-          :width="TAG_W"
-          :height="TAG_H"
-          rx="8"
-          class="fill-white/0 transition-colors hover:fill-white/15"
-        />
+        <circle v-else :cx="c.x" :cy="c.y" :r="NOTE_SIZE / 2 - 3" class="fill-white/0 transition-colors hover:fill-white/15" />
       </g>
     </svg>
   </div>
 </template>
 
 <style scoped>
-.tag {
+.mark {
   transition: opacity 0.15s;
 }
-.note-cell:hover .tag {
+.note-cell:hover .mark {
   opacity: 0.8;
 }
 </style>

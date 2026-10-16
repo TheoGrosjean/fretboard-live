@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Couleur d'accent de l'app, assortie au bois du manche (palette « cuivre » des notes) */
+@theme {
+  --color-copper-300: #f5b48f;
+  --color-copper-400: #f0956a;
+  --color-copper-500: #e2683a;
+  --color-copper-600: #c2522a;
+}
+
 html,
 body {
   background-color: #0b0d12;
