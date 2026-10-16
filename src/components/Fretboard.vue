@@ -15,6 +15,7 @@ const props = defineProps({
   anchor: { type: Object, default: null },
   palette: { type: String, default: DEFAULT_PALETTE }, // voir lib/noteStyles.js
   bodyFinish: { type: String, default: DEFAULT_BODY_FINISH }, // couleur unie du corps
+  focus: { type: Set, default: null }, // positions 'corde-case' de la box choisie ; les autres notes sont estompées
   heat: { type: Number, default: 0 }, // 0–3 : intensité du halo selon le multiplicateur de combo
   brokeAt: { type: Number, default: 0 }, // change quand le combo casse -> secousse
 })
@@ -429,7 +430,7 @@ const isWound = (s) => s >= 3
         <NoteMark v-else-if="isAlternate(c)" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="alternateMark(colors, { outside: playedOutside })" />
 
         <!-- Notes de la gamme / arpège -->
-        <NoteMark v-else-if="c.info" class="mark" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="scaleMark(c.info, label(c.midi, c.info), colors)" />
+        <NoteMark v-else-if="c.info" class="mark" :class="{ 'opacity-15': focus && !focus.has(c.key) }" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="scaleMark(c.info, label(c.midi, c.info), colors)" />
 
         <!-- Survol -->
         <circle v-else :cx="c.x" :cy="c.y" :r="NOTE_SIZE / 2 - 3" class="fill-white/0 transition-colors hover:fill-white/15" />

@@ -18,6 +18,7 @@ import {
   pitchClass,
 } from './lib/music'
 import { keyFromTitle } from './lib/keyFromTitle'
+import { positionKey, scaleBoxes } from './lib/boxes'
 import { PHRASE_GAP_MS, PHRASE_LENGTH, REVISABLE, bestFingering, handFrom, rootBox } from './lib/fingering'
 
 // ---------- Réglages persistés ----------
@@ -37,6 +38,7 @@ const notation = persisted('notation', 'fr')
 const labelMode = persisted('labelMode', 'note')
 const frets = persisted('frets', 22)
 const showAlternates = persisted('showAlternates', true)
+const boxIndex = persisted('boxIndex', 0) // 0 = tout le manche, sinon numéro de la box
 
 const tuning = STANDARD_TUNING
 
@@ -46,6 +48,14 @@ const pattern = computed(() => {
   return null
 })
 const overlay = computed(() => buildOverlay(root.value, pattern.value))
+// Boxes de la gamme courante ; la box choisie restreint l'affichage et la détection de position
+const boxes = computed(() => scaleBoxes(root.value, pattern.value, tuning, frets.value))
+const activeBox = computed(() => (boxIndex.value ? boxes.value[boxIndex.value - 1] ?? null : null))
+watch(boxes, (b) => {
+  if (boxIndex.value > b.length) boxIndex.value = 0
+})
+const boxLabel = (b) => b.ranges.map(([lo, hi]) => `${lo}–${hi}`).join(' · ')
+
 const overlayTitle = computed(() =>
   pattern.value ? `${NOTE_NAMES[notation.value][root.value]} ${pattern.value.name}` : 'Aucune gamme',
 )
@@ -109,7 +119,14 @@ let settled = [] // positions sorties de la phrase (pour situer la main au débu
 let lastNoteAt = 0
 
 function placeNote(midi, forcedPosition, legato) {
-  const candidates = forcedPosition ? [forcedPosition] : findPositions(midi, tuning, frets.value)
+  let candidates = forcedPosition ? [forcedPosition] : findPositions(midi, tuning, frets.value)
+  // Box choisie : la note est placée dans la box si elle y figure, sinon au plus près
+  const box = activeBox.value
+  if (box && !forcedPosition) {
+    const inBox = candidates.filter((c) => box.keys.has(positionKey(c)))
+    const near = candidates.filter((c) => box.ranges.some(([lo, hi]) => c.fret >= lo - 1 && c.fret <= hi + 1))
+    candidates = inBox.length ? inBox : near.length ? near : candidates
+  }
   if (!candidates.length) return null
 
   // Un silence termine la phrase ; au-delà de PHRASE_LENGTH notes, les plus anciennes sont figées
@@ -121,7 +138,7 @@ function placeNote(midi, forcedPosition, legato) {
   if (phrase.length > PHRASE_LENGTH) settled.push(...phrase.splice(0, phrase.length - PHRASE_LENGTH).map((n) => n.position))
   settled = settled.slice(-4)
 
-  const path = bestFingering(phrase, handFrom(settled), rootBox(root.value))
+  const path = bestFingering(phrase, handFrom(settled), activeBox.value?.center ?? rootBox(root.value))
   phrase.forEach((n, i) => {
     const moved = n.position && (n.position.string !== path[i].string || n.position.fret !== path[i].fret)
     n.position = path[i]
@@ -283,6 +300,31 @@ function toggleAudio() {
             <select v-else-if="overlayType === 'arpeggio'" v-model="arpeggioId" class="field" aria-label="Arpège">
               <option v-for="a in ARPEGGIOS" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
+
+            <!-- Position : tout le manche ou une box -->
+            <div v-if="boxes.length">
+              <span class="field-label">Position</span>
+              <div class="grid grid-cols-4 gap-1">
+                <button
+                  class="col-span-4 rounded-md py-1.5 text-xs font-semibold transition"
+                  :class="!boxIndex ? 'bg-copper-500 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
+                  @click="boxIndex = 0"
+                >
+                  Tout le manche
+                </button>
+                <button
+                  v-for="b in boxes"
+                  :key="b.index"
+                  class="flex flex-col items-center rounded-md py-1 transition"
+                  :class="boxIndex === b.index + 1 ? 'bg-copper-500 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
+                  :title="`Cases ${boxLabel(b)}`"
+                  @click="boxIndex = b.index + 1"
+                >
+                  <span class="text-xs font-semibold">Box {{ b.index + 1 }}</span>
+                  <span class="text-[10px] opacity-70 tabular-nums">{{ b.ranges[0][0] }}–{{ b.ranges[0][1] }}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -418,7 +460,10 @@ function toggleAudio() {
           <div class="text-[11px] font-semibold tracking-widest text-neutral-500 uppercase">
             {{ overlayType === 'arpeggio' ? 'Arpège' : overlayType === 'scale' ? 'Gamme' : 'Manche libre' }}
           </div>
-          <h2 class="text-3xl font-black tracking-tight text-white">{{ overlayTitle }}</h2>
+          <h2 class="text-3xl font-black tracking-tight text-white">
+            {{ overlayTitle }}
+            <span v-if="activeBox" class="text-copper-400">· Box {{ boxIndex }}</span>
+          </h2>
           <div v-if="keySyncActive" class="mt-1 flex items-center gap-1.5 text-xs text-neutral-400">
             <span class="size-2 rounded-full bg-[#1DB954]" />
             Réglé d'après « <span class="max-w-80 truncate text-neutral-300">{{ keySync.title }}</span> »
@@ -466,6 +511,7 @@ function toggleAudio() {
         :played="played"
         :alternates="alternates"
         :anchor="anchor"
+        :focus="activeBox?.keys ?? null"
         :heat="pattern ? combo.state.value.mult - 1 : 0"
         :broke-at="combo.brokeAt.value"
         @play="onFretClick"
