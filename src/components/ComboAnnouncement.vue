@@ -264,7 +264,6 @@ const TONES = {
 /* 5 · Puissant : impact massif */
 .fx-punch .word {
   color: #fff;
-  font-size: 1.25em;
   -webkit-text-stroke: 1px var(--color-copper-500);
   animation: punch 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both;
 }
@@ -274,7 +273,7 @@ const TONES = {
     opacity: 0;
   }
   to {
-    transform: scale(1);
+    transform: scale(1.15); /* un cran plus gros que les autres sensations */
     opacity: 1;
   }
 }
