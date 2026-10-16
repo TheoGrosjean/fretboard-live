@@ -72,6 +72,8 @@ export function useCombo({ scaleKey, scaleSize, onEvent = () => {} }) {
       } else if (e.type === 'full-scale') announce('Gamme complète !')
       else if (e.type === 'tier') announce(e.mult === 4 ? '×4 EN FEU !' : `×${e.mult} !`, e.mult === 4 ? 'fire' : 'copper')
       else if (e.type === 'milestone') announce(`${e.combo} COMBO !`)
+      else if (e.type === 'slide')
+        announce('SLIDE', 'copper', { sub: `${e.span} cases ${e.up ? 'vers le corps' : 'vers la tête'}`, effect: e.up ? 'slide-up' : 'slide-down', duration: 1500 })
       else if (e.type === 'warning') announce('Attention, 1 erreur', 'warn')
       else if (e.type === 'repeat') announce('Varie les notes !', 'warn')
       else if (e.type === 'break') {

@@ -13,6 +13,8 @@
  *    pour annoncer la sensation qu'elle produit (voir lib/feelings.js)
  *  - slides / bends / legato : une note hors gamme jouée sans attaque, à 1–2 demi-tons de la précédente,
  *    est une note de passage — ni erreur, ni comptée dans la précision
+ *  - grand slide (au moins 5 cases d'un coup, sans attaque) : bonus et annonce « SLIDE » ; s'il arrive
+ *    hors gamme, c'est une note de passage
  */
 
 export const TIERS = [0, 10, 25, 50] // combo nécessaire pour ×1, ×2, ×3, ×4
@@ -23,8 +25,22 @@ export const MAX_REPEATS = 8 // au-delà, la même note répétée ne fait plus 
 export const ALLOWED_MISSES = 1 // fausses notes d'affilée tolérées
 export const MIN_PHRASE_NOTES = 3 // notes minimum pour annoncer la sensation de fin de phrase
 export const GLIDE_SEMITONES = 2 // écart maximal d'une note de passage avec la note précédente
+export const SLIDE_MIN_SEMITONES = 5 // écart minimal d'un grand slide
+const SLIDE_COVERAGE = 0.4 // part des demi-tons intermédiaires qu'on doit avoir entendus pendant le glissé
 
-const POINTS = { note: 10, explore: 5, fullScale: 100, resolution: 50 }
+const POINTS = { note: 10, explore: 5, fullScale: 100, resolution: 50, slide: 20 }
+
+/**
+ * Grand slide : arrivée sans attaque à au moins SLIDE_MIN_SEMITONES, en passant par une bonne partie
+ * des demi-tons intermédiaires (`swept`). Écarte les erreurs d'octave et les hammer-ons, qui sautent d'un coup.
+ */
+export function isSlide(from, to, swept) {
+  const span = Math.abs(to - from)
+  if (span < SLIDE_MIN_SEMITONES) return false
+  let heard = 0
+  for (let m = Math.min(from, to) + 1; m < Math.max(from, to); m++) if (swept.has(m)) heard++
+  return heard >= (span - 1) * SLIDE_COVERAGE
+}
 
 export const multiplierFor = (combo) => TIERS.filter((t) => combo >= t).length
 
@@ -70,17 +86,21 @@ function breakCombo(run, reason) {
 
 /**
  * Une note jouée.
- * note : { midi, string, fret, info, legato, interval } — info = degré dans la gamme, ou null si hors gamme ;
+ * note : { midi, string, fret, info, legato, interval, slide } — info = degré dans la gamme, ou null si hors gamme ;
  *        legato = la note est arrivée sans nouvelle attaque (slide, bend, hammer-on…) ;
+ *        slide = { from, to } (midi) si la note termine un grand slide ;
  *        interval = écart avec la tonique (0–11), même hors gamme
  * scaleSize : nombre de notes de la gamme (pour « gamme complète »)
  */
-export function playNote(run, { midi, string, fret, info, legato = false, interval = null }, scaleSize, now) {
+export function playNote(run, { midi, string, fret, info, legato = false, interval = null, slide = null }, scaleSize, now) {
   const prevMidi = run.prevMidi
   run.prevMidi = midi
   run.lastAt = now
+  const slideEvent = slide && { type: 'slide', span: Math.abs(slide.to - slide.from), up: slide.to > slide.from }
 
-  if (!info && legato && prevMidi !== null && Math.abs(midi - prevMidi) <= GLIDE_SEMITONES) return [{ type: 'glide' }]
+  if (!info && legato && prevMidi !== null && (slide || Math.abs(midi - prevMidi) <= GLIDE_SEMITONES)) {
+    return slideEvent ? [{ type: 'glide' }, slideEvent] : [{ type: 'glide' }]
+  }
 
   run.notes++
   run.phraseNotes++
@@ -122,6 +142,11 @@ export function playNote(run, { midi, string, fret, info, legato = false, interv
     run.fullScale = true
     points += POINTS.fullScale
     events.push({ type: 'full-scale' })
+  }
+
+  if (slideEvent) {
+    points += POINTS.slide
+    events.push(slideEvent)
   }
 
   run.score += points * mult

@@ -19,6 +19,7 @@ const props = defineProps({
   focus: { type: Set, default: null }, // positions 'corde-case' de la box choisie ; les autres notes sont estompées
   heat: { type: Number, default: 0 }, // 0–3 : intensité du halo selon le multiplicateur de combo
   brokeAt: { type: Number, default: 0 }, // change quand le combo casse -> secousse
+  slide: { type: Object, default: null }, // { id, string, fromFret, toFret } : traînée lumineuse d'un grand slide
 })
 const emit = defineEmits(['play'])
 
@@ -95,6 +96,15 @@ function label(midi, info) {
 const colors = computed(() => accentPalette(findPalette(props.palette), props.bodyFinish))
 const bodyColor = computed(() => findBodyFinish(props.bodyFinish).color)
 // Finition claire : logo de la tête en foncé pour rester lisible
+// Traînée d'un grand slide, le long de la corde
+const slideTrail = computed(() => {
+  const s = props.slide
+  if (!s) return null
+  const x1 = noteX(s.fromFret)
+  const x2 = noteX(s.toFret)
+  return { id: s.id, x1, x2, y: stringY(s.string), length: Math.abs(x2 - x1) }
+})
+
 const lightHead = computed(() => {
   if (!props.matchHead) return false
   const hex = bodyColor.value.slice(1)
@@ -450,6 +460,20 @@ const isWound = (s) => s >= 3
         {{ f }}
       </text>
 
+      <!-- Traînée lumineuse d'un grand slide (sous les notes) -->
+      <g v-if="slideTrail" :key="'slide' + slideTrail.id" class="slide-trail" :style="{ '--len': slideTrail.length }">
+        <defs>
+          <linearGradient :id="'slide-grad' + slideTrail.id" gradientUnits="userSpaceOnUse" :x1="slideTrail.x1" :y1="0" :x2="slideTrail.x2" :y2="0">
+            <stop offset="0" :stop-color="colors.played" stop-opacity="0" />
+            <stop offset="0.7" :stop-color="colors.played" stop-opacity="0.8" />
+            <stop offset="1" stop-color="#fff" />
+          </linearGradient>
+          <filter id="slide-blur" x="-10%" y="-200%" width="120%" height="500%"><feGaussianBlur stdDeviation="6" /></filter>
+        </defs>
+        <line class="trail" :x1="slideTrail.x1" :y1="slideTrail.y" :x2="slideTrail.x2" :y2="slideTrail.y" :stroke="`url(#slide-grad${slideTrail.id})`" stroke-width="28" stroke-linecap="round" filter="url(#slide-blur)" />
+        <line class="trail" :x1="slideTrail.x1" :y1="slideTrail.y" :x2="slideTrail.x2" :y2="slideTrail.y" :stroke="`url(#slide-grad${slideTrail.id})`" stroke-width="10" stroke-linecap="round" />
+      </g>
+
       <!-- Notes -->
       <g v-for="c in cells" :key="c.key" class="note-cell cursor-pointer" @click="emit('play', { string: c.string, fret: c.fret, midi: c.midi })">
         <rect :x="c.x - NOTE_SIZE / 2 - 6" :y="c.y - SPACING / 2" :width="NOTE_SIZE + 12" :height="SPACING" fill="transparent" />
@@ -471,6 +495,25 @@ const isWound = (s) => s >= 3
 </template>
 
 <style scoped>
+/* Grand slide : la traînée se dessine du départ vers l'arrivée, puis s'efface */
+.slide-trail {
+  animation: trail-fade 1.1s ease-in 0.25s forwards;
+}
+.slide-trail .trail {
+  stroke-dasharray: calc(var(--len) * 1px) 9999px;
+  stroke-dashoffset: calc(var(--len) * 1px);
+  animation: trail-draw 0.22s ease-out forwards;
+}
+@keyframes trail-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes trail-fade {
+  to {
+    opacity: 0;
+  }
+}
 .fire-glow {
   animation: fire-glow 1.4s ease-in-out infinite;
 }

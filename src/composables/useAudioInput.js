@@ -1,6 +1,7 @@
 import { computed, ref, shallowRef, onBeforeUnmount } from 'vue'
 import { createYinDetector } from '../lib/pitch'
 import { freqToMidi } from '../lib/music'
+import { isSlide } from '../lib/combo'
 
 const STABLE_FRAMES = 3 // nombre de trames identiques avant de valider une note
 const RELEASE_MS = 120 // silence nécessaire avant de considérer la note terminée
@@ -55,6 +56,7 @@ export function useAudioInput({ onNote } = {}) {
   let candidateCount = 0
   let candidateSince = 0
   let attackPending = false // une attaque a eu lieu depuis la dernière note émise
+  let swept = new Set() // demi-tons entendus depuis la dernière note émise (pour reconnaître un slide)
   let lastSoundAt = 0
   let smoothedRms = 0
 
@@ -153,7 +155,10 @@ export function useAudioInput({ onNote } = {}) {
     // Attaque : forte hausse du volume => nouvelle note même si identique
     const attack = rms > smoothedRms * 1.8 && rms > threshold.value * 2
     smoothedRms = smoothedRms * 0.8 + rms * 0.2
-    if (attack) attackPending = true
+    if (attack) {
+      attackPending = true
+      swept = new Set()
+    }
 
     const result = rms > threshold.value ? detect(buffer) : null
     if (!result) {
@@ -163,6 +168,7 @@ export function useAudioInput({ onNote } = {}) {
         current.value = null
         candidate = null
         candidateCount = 0
+        swept = new Set()
       }
       return
     }
@@ -172,6 +178,7 @@ export function useAudioInput({ onNote } = {}) {
     frequency.value = result.freq
     midiFloat.value = m
     const rounded = Math.round(m)
+    swept.add(rounded)
 
     if (rounded === candidate) candidateCount++
     else {
@@ -188,8 +195,11 @@ export function useAudioInput({ onNote } = {}) {
       const isNew = !previous || previous.midi !== rounded || attack
       current.value = { midi: rounded, freq: result.freq, cents: (m - rounded) * 100 }
       if (isNew) {
-        onNote?.({ ...current.value, legato })
+        // Grand glissé sans nouvelle attaque, en passant par les cases intermédiaires
+        const slide = legato && isSlide(previous.midi, rounded, swept) ? { from: previous.midi, to: rounded } : null
+        onNote?.({ ...current.value, legato, slide })
         attackPending = false
+        swept = new Set([rounded])
       }
     }
   }

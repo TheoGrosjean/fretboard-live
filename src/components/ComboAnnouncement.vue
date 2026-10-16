@@ -261,6 +261,42 @@ const TONES = {
   }
 }
 
+/* Grand slide : le mot file dans le sens du glissé, penché, avec des traînées de vitesse */
+.fx-slide-up .word,
+.fx-slide-down .word {
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: #fff;
+  --dir: 1;
+  text-shadow:
+    calc(var(--dir) * -0.25em) 0 0 color-mix(in srgb, var(--color-copper-400) 45%, transparent),
+    calc(var(--dir) * -0.5em) 0 0 color-mix(in srgb, var(--color-copper-500) 25%, transparent),
+    calc(var(--dir) * -0.8em) 0 0.04em color-mix(in srgb, var(--color-copper-600) 12%, transparent);
+  animation: slide-in 0.38s cubic-bezier(0.15, 0.9, 0.3, 1.15) both;
+}
+.fx-slide-down .word {
+  --dir: -1;
+}
+.fx-slide-up .ch,
+.fx-slide-down .ch {
+  display: inline-block;
+  transform: skewX(calc(var(--dir) * -14deg));
+}
+@keyframes slide-in {
+  from {
+    transform: translateX(calc(var(--dir) * -40vw));
+    opacity: 0;
+    filter: blur(6px);
+  }
+  70% {
+    filter: blur(0);
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
 /* 5 · Puissant : impact massif */
 .fx-punch .word {
   color: #fff;

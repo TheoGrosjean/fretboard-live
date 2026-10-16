@@ -208,13 +208,13 @@ function placeNote(midi, forcedPosition, legato) {
   return note
 }
 
-function registerNote(midi, forcedPosition = null, legato = false) {
+function registerNote(midi, forcedPosition = null, legato = false, slide = null) {
   const note = placeNote(midi, forcedPosition, legato)
   if (!note) return
   const position = note.position
 
   const info = overlay.value.get(pitchClass(midi)) ?? null
-  const events = overlay.value.size ? combo.play({ midi, ...position, info, legato, interval: (pitchClass(midi) - root.value + 12) % 12 }) : []
+  const events = overlay.value.size ? combo.play({ midi, ...position, info, legato, slide, interval: (pitchClass(midi) - root.value + 12) % 12 }) : []
   const glide = events.some((e) => e.type === 'glide') // note de passage d'un slide : pas une erreur
 
   history.value.unshift({
@@ -230,10 +230,28 @@ function registerNote(midi, forcedPosition = null, legato = false) {
   if (history.value.length > 24) history.value.length = 24
 }
 
+// Grand slide : traînée sur le manche, de la case de départ à la case d'arrivée
+const slideTrail = shallowRef(null) // { id, string, fromFret, toFret }
+let slideId = 0
+
+/** Un slide reste sur la même corde : la note d'arrivée est placée en conséquence quand c'est possible. */
+function slidePosition(slide) {
+  const from = played.value
+  if (!from || from.midi !== slide.from) return null
+  const fret = from.fret + (slide.to - slide.from)
+  return fret >= 0 && fret <= frets.value ? { string: from.string, fret } : null
+}
+
 const audio = useAudioInput({
   onNote: (n) => {
     clearTimeout(clearTimer)
-    registerNote(n.midi, null, n.legato)
+    const forced = n.slide ? slidePosition(n.slide) : null
+    const fromFret = played.value?.fret
+    registerNote(n.midi, forced, n.legato, n.slide)
+    if (n.slide && played.value) {
+      const to = played.value
+      slideTrail.value = { id: ++slideId, string: to.string, fromFret: forced ? fromFret : Math.min(frets.value, Math.max(0, to.fret - (n.slide.to - n.slide.from))), toFret: to.fret }
+    }
   },
 })
 
@@ -614,6 +632,7 @@ function toggleAudio() {
           :focus="activeBox?.keys ?? null"
           :heat="pattern ? combo.state.value.mult - 1 : 0"
           :broke-at="combo.brokeAt.value"
+          :slide="slideTrail"
           @play="onFretClick"
         />
         <ComboAnnouncement :announcement="combo.announcement.value" />
