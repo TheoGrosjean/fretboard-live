@@ -53,7 +53,7 @@ const stringY = (s) => TOP + s * SPACING
 // s'arrête le plus près du sillet, celle du haut le plus loin : les mécaniques forment une diagonale,
 // avec leur bouton juste dessous, le long du bord inférieur de la tête. Le reste sort du cadre à gauche.
 const POST_STEP = 100 // écart entre deux mécaniques : règle la pente du bord du bas de la tête
-const FIRST_POST_X = NUT_X - 110 // laisse la place à l'arrondi du bas ; les mécaniques des cordes aiguës sortent du cadre
+const FIRST_POST_X = NUT_X - 220 // laisse la place à l'arrondi du bas ; les mécaniques sortent du cadre
 function postOf(s) {
   const rank = stringCount.value - 1 - s // 0 = corde du bas, mécanique la plus proche du sillet
   return { x: FIRST_POST_X - rank * POST_STEP, y: stringY(s) }
@@ -137,11 +137,11 @@ const headPath = computed(() => {
   const edge = (x) => low.y + KNOB_GAP - (low.x - x) * slope
   return [
     `M ${nut} ${top}`,
-    `C ${nut - 40} ${top} ${nut - 60} ${top - 44} ${nut - 115} ${top - 52}`,
-    `L -260 ${top - 72}`,
+    `C ${nut - 80} ${top} ${nut - 110} ${top - 58} ${nut - 230} ${top - 62}`,
+    `L -260 ${top - 66}`,
     `L -260 ${edge(-260)}`,
     `L ${low.x + 8} ${edge(low.x + 8)}`,
-    `C ${low.x + 50} ${bottom + 34} ${nut - 40} ${bottom} ${nut} ${bottom}`,
+    `C ${low.x + 100} ${bottom + 56} ${nut - 80} ${bottom} ${nut} ${bottom}`,
     'Z',
   ].join(' ')
 })
