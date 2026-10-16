@@ -1,9 +1,11 @@
 <script setup>
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import Fretboard from './components/Fretboard.vue'
 import Tuner from './components/Tuner.vue'
 import ComboPanel from './components/ComboPanel.vue'
 import ComboAnnouncement from './components/ComboAnnouncement.vue'
+import FinisherFight from './components/finishers/FinisherFight.vue'
+import { createTrackSession, recordEvent, sessionResult } from './lib/finisher'
 import Icon from './components/Icon.vue'
 import SpotifyPlayer from './components/SpotifyPlayer.vue'
 import LoaderNeck from './components/loaders/LoaderNeck.vue'
@@ -102,10 +104,49 @@ const syncState = () => [overlayType.value, root.value, scaleId.value, arpeggioI
 const keySyncActive = computed(() => keySync.value && keySync.value.state === syncState())
 
 // ---------- Combo ----------
+// Statistiques par backing track, pour l'écran « FINISH! » de fin de morceau
+const trackSessions = {} // uri -> session (on garde le morceau précédent : sa fin arrive après le début du suivant)
+let trackSession = null
+const finisher = shallowRef(null)
+
 const combo = useCombo({
+  onEvent: (e) => trackSession && recordEvent(trackSession, e),
   scaleKey: computed(() => (pattern.value ? `${overlayType.value}:${root.value}:${pattern.value.id}` : 'none')),
   scaleSize: computed(() => overlay.value.size),
 })
+
+watch(
+  () => combo.state.value.combo,
+  (c) => trackSession && (trackSession.bestCombo = Math.max(trackSession.bestCombo, c)),
+)
+
+function onTrackStart(track) {
+  trackSession = createTrackSession(track)
+  trackSessions[track.uri] = trackSession
+  // Morceaux zappés avant la fin : on ne garde que les derniers
+  Object.keys(trackSessions).slice(0, -3).forEach((uri) => delete trackSessions[uri])
+}
+
+function onTrackEnd(ended) {
+  const session = trackSessions[ended.uri]
+  delete trackSessions[ended.uri]
+  if (session === trackSession) trackSession = null
+  let records = {}
+  try {
+    records = JSON.parse(localStorage.getItem('fb.trackRecords')) ?? {}
+  } catch {
+    records = {}
+  }
+  const result = sessionResult(session, records[ended.uri] ?? 0)
+  if (!result) return
+  if (result.newRecord) localStorage.setItem('fb.trackRecords', JSON.stringify({ ...records, [ended.uri]: result.score }))
+  finisher.value = { ...result, id: Date.now() }
+}
+
+// Échap ferme le finisher
+const onKeydown = (e) => e.key === 'Escape' && (finisher.value = null)
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 // ---------- Notes jouées ----------
 const played = shallowRef(null) // { midi, string, fret }
@@ -220,6 +261,11 @@ function toggleAudio() {
 </script>
 
 <template>
+  <!-- Fin de backing track : écran « FINISH! » -->
+  <div v-if="finisher" class="fixed inset-0 z-50">
+    <FinisherFight :key="finisher.id" :result="finisher" @close="finisher = null" />
+  </div>
+
   <!-- Animation de chargement : le manche se dessine, puis on plonge dans l'app -->
   <div v-if="splash" class="fixed inset-0 z-50">
     <LoaderNeck @done="splash = false" />
@@ -542,7 +588,7 @@ function toggleAudio() {
 
       <!-- Accordeur + historique -->
       <div class="mt-4 grid min-h-0 flex-1 gap-4 overflow-y-auto xl:grid-cols-2 xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
-        <SpotifyPlayer :suggestion="backingSuggestion" @track-change="onTrackChange" />
+        <SpotifyPlayer :suggestion="backingSuggestion" @track-change="onTrackChange" @track-start="onTrackStart" @track-end="onTrackEnd" />
         <div class="flex min-h-0 flex-col gap-4">
           <ComboPanel
             :state="combo.state.value"

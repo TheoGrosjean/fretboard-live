@@ -8,7 +8,7 @@ const props = defineProps({
   suggestion: { type: String, default: 'guitar backing track' }, // recherche proposée selon la gamme choisie
 })
 
-const emit = defineEmits(['track-change'])
+const emit = defineEmits(['track-change', 'track-start', 'track-end'])
 
 const sp = useSpotify()
 
@@ -17,8 +17,14 @@ const followKey = ref(localStorage.getItem('fb.spotify.followKey') !== 'false')
 watch(followKey, (v) => localStorage.setItem('fb.spotify.followKey', String(v)))
 watch(
   () => sp.track.value?.uri,
-  (uri) => uri && followKey.value && emit('track-change', sp.track.value),
+  (uri) => {
+    if (!uri) return
+    emit('track-start', sp.track.value)
+    if (followKey.value) emit('track-change', sp.track.value)
+  },
 )
+// Morceau joué jusqu'au bout (pour le finisher)
+watch(sp.ended, (e) => e && emit('track-end', e))
 
 const tab = ref('search') // 'search' | 'playlists'
 const query = ref('')

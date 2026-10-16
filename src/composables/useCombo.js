@@ -17,7 +17,7 @@ function loadRecords() {
  * scaleKey : identifiant de la gamme (les records sont gardés par gamme ; changer de gamme démarre une nouvelle partie)
  * scaleSize : nombre de notes de la gamme
  */
-export function useCombo({ scaleKey, scaleSize }) {
+export function useCombo({ scaleKey, scaleSize, onEvent = () => {} }) {
   let run = createRun()
   const version = ref(0) // incrémenté à chaque changement de `run` pour rafraîchir les computed
   const touch = () => version.value++
@@ -61,6 +61,7 @@ export function useCombo({ scaleKey, scaleSize }) {
   }
 
   function handle(events) {
+    events.forEach(onEvent)
     for (const e of events) {
       if (e.type === 'hit') floater.value = { id: ++eventId, text: `+${e.points}` }
       else if (e.type === 'resolution') floater.value = { id: ++eventId, text: `+${e.points}` }

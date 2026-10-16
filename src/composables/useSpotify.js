@@ -24,6 +24,8 @@ export function useSpotify() {
   const user = shallowRef(null)
   const ready = ref(false) // l'appareil est enregistré auprès de Spotify
   const error = ref('')
+  const ended = shallowRef(null) // { id, uri, name, artists } : dernier morceau joué jusqu'au bout
+  let endedId = 0
 
   const track = shallowRef(null) // { name, artists, album, image, uri }
   const paused = ref(true)
@@ -58,6 +60,21 @@ export function useSpotify() {
     return data
   }
 
+  /**
+   * Fin de morceau : le morceau précédent était dans ses dernières secondes et, depuis, on est passé
+   * au suivant ou la lecture s'est arrêtée au début. Un changement manuel en cours de morceau ne compte pas.
+   */
+  function detectEnd(prev, prevAt, state) {
+    const prevTrack = prev?.track_window?.current_track
+    if (!prevTrack || prev.paused) return
+    const prevPosition = prev.position + (performance.now() - prevAt)
+    if (prevPosition < prev.duration - 4000) return
+    const changed = !state || state.track_window.current_track.uri !== prevTrack.uri
+    const stoppedAtStart = state?.paused && state.position === 0
+    if (!changed && !stoppedAtStart) return
+    ended.value = { id: ++endedId, uri: prevTrack.uri, name: prevTrack.name, artists: prevTrack.artists.map((a) => a.name).join(', ') }
+  }
+
   async function initPlayer() {
     const Spotify = await loadSdk()
     player = new Spotify.Player({
@@ -72,6 +89,7 @@ export function useSpotify() {
     })
     player.addListener('not_ready', () => (ready.value = false))
     player.addListener('player_state_changed', (state) => {
+      detectEnd(lastState, lastStateAt, state)
       lastState = state
       lastStateAt = performance.now()
       if (!state) {
@@ -187,6 +205,7 @@ export function useSpotify() {
     ready,
     error,
     track,
+    ended,
     paused,
     position,
     duration,

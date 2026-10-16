@@ -4,8 +4,8 @@
 import { formatScore, useCountUp } from './useCountUp'
 
 const props = defineProps({
-  result: { type: Object, required: true }, // { rank, word, title, artist, score, bestCombo, accuracy, newRecord, style }
-  freezeAt: { type: Number, default: null },
+  result: { type: Object, required: true }, // voir sessionResult() dans lib/finisher.js
+  freezeAt: { type: Number, default: null }, // ms : fige le score (aperçus)
 })
 defineEmits(['close'])
 
