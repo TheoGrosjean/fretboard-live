@@ -144,7 +144,10 @@ export function useSpotify() {
     loggedIn.value = false
   }
 
-  /** Lance un morceau (uri) ou une playlist / un album (contextUri) sur le lecteur de la page. */
+  /**
+   * Lance un morceau (uri) ou une playlist / un album (contextUri) sur le lecteur de la page.
+   * Avec les deux : la playlist démarre sur ce morceau puis continue.
+   */
   async function play({ uri, contextUri }) {
     error.value = ''
     // Doit être appelé pendant le clic, sinon le navigateur bloque la lecture automatique
@@ -156,7 +159,7 @@ export function useSpotify() {
     try {
       await api(`/me/player/play?device_id=${deviceId}`, {
         method: 'PUT',
-        body: contextUri ? { context_uri: contextUri } : { uris: [uri] },
+        body: contextUri ? { context_uri: contextUri, ...(uri && { offset: { uri } }) } : { uris: [uri] },
       })
     } catch (e) {
       error.value = e.message
@@ -176,6 +179,21 @@ export function useSpotify() {
   async function myPlaylists() {
     const data = await api('/me/playlists?limit=50')
     return data.items.filter(Boolean)
+  }
+
+  /** Morceaux d'une playlist (les épisodes de podcast et les titres indisponibles sont écartés). */
+  async function playlistTracks(id) {
+    const tracks = []
+    let path = `/playlists/${id}/tracks?limit=100`
+    while (path && tracks.length < 500) {
+      const data = await api(path)
+      for (const it of data.items ?? []) {
+        const t = it?.track ?? it?.item
+        if (t?.type === 'track' && t.uri && !t.is_local) tracks.push(t)
+      }
+      path = data.next ? data.next.replace('https://api.spotify.com/v1', '') : null
+    }
+    return tracks
   }
 
   const togglePlay = () => player?.togglePlay()
@@ -215,6 +233,7 @@ export function useSpotify() {
     play,
     search,
     myPlaylists,
+    playlistTracks,
     togglePlay,
     next,
     previous,

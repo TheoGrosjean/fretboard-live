@@ -36,6 +36,7 @@ async function runSearch(q = query.value) {
   if (!q.trim()) return
   query.value = q
   tab.value = 'search'
+  opened.value = null
   loading.value = true
   try {
     results.value = await sp.search(q)
@@ -58,6 +59,20 @@ async function loadPlaylists() {
     loading.value = false
   }
 }
+
+// Playlist ouverte : liste de ses morceaux
+const opened = ref(null) // { playlist, tracks, loading }
+async function openPlaylist(p) {
+  opened.value = { playlist: p, tracks: [], loading: true }
+  try {
+    const tracks = await sp.playlistTracks(p.id)
+    if (opened.value?.playlist.id === p.id) opened.value = { playlist: p, tracks, loading: false }
+  } catch (e) {
+    sp.error.value = e.message
+    opened.value = null
+  }
+}
+watch(tab, () => (opened.value = null))
 
 // Première recherche automatique dès que le lecteur est prêt
 watch(sp.ready, (r) => r && !query.value && runSearch(props.suggestion), { immediate: true })
@@ -177,11 +192,45 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
         Suggestion : {{ suggestion }}
       </button>
 
-      <ul class="mt-3 min-h-32 flex-1 space-y-1 overflow-y-auto pr-1">
+      <!-- Playlist ouverte -->
+      <div v-if="opened" class="mt-3 flex min-h-32 flex-1 flex-col">
+        <div class="flex items-center gap-3 border-b border-white/5 pb-3">
+          <button class="ctrl shrink-0" title="Retour" @click="opened = null"><Icon name="collapse" class="size-5" /></button>
+          <img v-if="cover(opened.playlist.images)" :src="cover(opened.playlist.images)" alt="" class="size-12 shrink-0 rounded object-cover" />
+          <div class="min-w-0 flex-1">
+            <div class="truncate font-semibold text-neutral-100">{{ opened.playlist.name }}</div>
+            <div class="truncate text-xs text-neutral-500">
+              {{ opened.loading ? 'Chargement…' : `${opened.tracks.length} morceaux` }}<template v-if="opened.playlist.owner?.display_name"> · {{ opened.playlist.owner.display_name }}</template>
+            </div>
+          </div>
+          <button
+            class="flex shrink-0 items-center gap-1.5 rounded-full bg-[#1DB954] px-4 py-1.5 text-sm font-bold text-neutral-950 transition hover:bg-[#1ed760]"
+            @click="sp.play({ contextUri: opened.playlist.uri })"
+          >
+            <Icon name="play" class="size-4" /> Tout lire
+          </button>
+        </div>
+        <ul class="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+          <li v-for="(t, i) in opened.tracks" :key="t.uri + i">
+            <button class="result" :class="sp.track.value?.uri === t.uri ? 'bg-[#1DB954]/10' : ''" @click="sp.play({ contextUri: opened.playlist.uri, uri: t.uri })">
+              <span class="w-5 shrink-0 text-right text-xs text-neutral-600 tabular-nums">{{ i + 1 }}</span>
+              <img v-if="cover(t.album?.images)" :src="cover(t.album.images)" alt="" class="size-10 rounded object-cover" />
+              <span class="min-w-0 flex-1 text-left">
+                <span class="block truncate text-sm" :class="sp.track.value?.uri === t.uri ? 'text-[#1DB954]' : 'text-neutral-200'">{{ t.name }}</span>
+                <span class="block truncate text-xs text-neutral-500">{{ t.artists?.map((a) => a.name).join(', ') }}</span>
+              </span>
+              <span class="text-xs text-neutral-600 tabular-nums">{{ formatTime(t.duration_ms) }}</span>
+            </button>
+          </li>
+          <li v-if="!opened.loading && !opened.tracks.length" class="py-4 text-center text-sm text-neutral-600">Aucun morceau lisible dans cette playlist.</li>
+        </ul>
+      </div>
+
+      <ul v-else class="mt-3 min-h-32 flex-1 space-y-1 overflow-y-auto pr-1">
         <li v-if="loading" class="py-4 text-center text-sm text-neutral-600">Chargement…</li>
         <template v-else-if="tab === 'search'">
           <li v-for="p in results.playlists" :key="p.id">
-            <button class="result" @click="sp.play({ contextUri: p.uri })">
+            <button class="result" @click="openPlaylist(p)">
               <img v-if="cover(p.images)" :src="cover(p.images)" alt="" class="size-10 rounded object-cover" />
               <span class="min-w-0 flex-1 text-left">
                 <span class="block truncate text-sm text-neutral-200">{{ p.name }}</span>
@@ -203,9 +252,13 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
         </template>
         <template v-else>
           <li v-for="p in playlists" :key="p.id">
-            <button class="result" @click="sp.play({ contextUri: p.uri })">
+            <button class="result" @click="openPlaylist(p)">
               <img v-if="cover(p.images)" :src="cover(p.images)" alt="" class="size-10 rounded object-cover" />
-              <span class="min-w-0 flex-1 truncate text-left text-sm text-neutral-200">{{ p.name }}</span>
+              <span class="min-w-0 flex-1 text-left">
+                <span class="block truncate text-sm text-neutral-200">{{ p.name }}</span>
+                <span v-if="p.tracks?.total ?? p.items?.total" class="block truncate text-xs text-neutral-500">{{ p.tracks?.total ?? p.items?.total }} morceaux</span>
+              </span>
+              <Icon name="expand" class="size-4 shrink-0 text-neutral-600" />
             </button>
           </li>
         </template>
