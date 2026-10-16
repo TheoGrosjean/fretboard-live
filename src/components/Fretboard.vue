@@ -53,7 +53,7 @@ const stringY = (s) => TOP + s * SPACING
 // s'arrête le plus près du sillet, celle du haut le plus loin : les mécaniques forment une diagonale,
 // avec leur bouton juste dessous, le long du bord inférieur de la tête. Le reste sort du cadre à gauche.
 const POST_STEP = 100 // écart entre deux mécaniques : règle la pente du bord du bas de la tête
-const FIRST_POST_X = NUT_X - 220 // laisse la place à l'arrondi du bas ; les mécaniques sortent du cadre
+const FIRST_POST_X = 20 // mécanique du Mi grave au bord gauche ; les autres sortent du cadre
 function postOf(s) {
   const rank = stringCount.value - 1 - s // 0 = corde du bas, mécanique la plus proche du sillet
   return { x: FIRST_POST_X - rank * POST_STEP, y: stringY(s) }
@@ -126,7 +126,7 @@ const handZone = computed(() => {
 })
 
 // Contour : la fin du manche s'évase en arrondi des deux côtés ; en haut la tête sort du cadre,
-// en bas le bord remonte en diagonale le long des mécaniques des cordes graves
+// en bas l'arrondi s'arrête sur un angle net d'où le bord remonte en diagonale vers la gauche
 const headPath = computed(() => {
   const nut = NUT_X - 8
   const top = woodTop - 4
@@ -135,13 +135,15 @@ const headPath = computed(() => {
   const high = postOf(0)
   const slope = (low.y - high.y) / (low.x - high.x) // pente de la diagonale des mécaniques
   const edge = (x) => low.y + KNOB_GAP - (low.x - x) * slope
+  const corner = nut - 90 // fin de l'arrondi, début de la diagonale
   return [
     `M ${nut} ${top}`,
-    `C ${nut - 80} ${top} ${nut - 110} ${top - 58} ${nut - 230} ${top - 62}`,
-    `L -260 ${top - 66}`,
+    `C ${nut - 40} ${top} ${nut - 60} ${top - 44} ${nut - 115} ${top - 52}`,
+    `L -260 ${top - 72}`,
     `L -260 ${edge(-260)}`,
-    `L ${low.x + 8} ${edge(low.x + 8)}`,
-    `C ${low.x + 100} ${bottom + 56} ${nut - 80} ${bottom} ${nut} ${bottom}`,
+    // Angle net entre la diagonale et l'arrondi qui rejoint le manche
+    `L ${corner} ${edge(corner)}`,
+    `C ${corner + 34} ${edge(corner)} ${nut - 40} ${bottom} ${nut} ${bottom}`,
     'Z',
   ].join(' ')
 })
