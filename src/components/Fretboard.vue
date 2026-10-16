@@ -49,17 +49,28 @@ function fretX(f) {
 const noteX = (f) => (f === 0 ? NUT_X - 26 : (fretX(f - 1) + fretX(f)) / 2)
 const stringY = (s) => TOP + s * SPACING
 
-// Tête en 3+3 : cordes aiguës vers le haut, graves vers le bas ; la corde la plus centrale
-// va à la mécanique la plus proche du sillet, les cordes s'écartent en éventail depuis le sillet
-const POST_STEP = 44 // écart horizontal entre deux mécaniques
+// Tête pointue façon Ibanez, 6 mécaniques en ligne le long d'un bord en biais qui descend du sillet
+// jusqu'à la pointe (en bas à gauche). Chaque mécanique est juste au-dessus de sa propre corde :
+// les cordes restent presque droites et ne se croisent pas.
+const POST_STEP = 22 // écart horizontal entre deux mécaniques
+const POST_RISE = 28 // la mécanique est un peu au-dessus de sa corde
+const EDGE_GAP = 22 // distance entre une mécanique et le bord de la tête
 function postOf(s) {
-  const half = stringCount.value / 2
-  const top = s < half
-  const rank = top ? half - 1 - s : s - half // 0 = mécanique la plus proche du sillet
-  const outer = rank === half - 1 // corde extérieure : un peu moins d'écart pour rester dans la tête
-  return { x: NUT_X - 56 - rank * POST_STEP, y: stringY(s) + (top ? -1 : 1) * (outer ? 40 : 44), top }
+  // La première reste à l'écart des notes à vide, posées juste avant le sillet
+  return { x: NUT_X - 58 - s * POST_STEP, y: stringY(s) - POST_RISE, top: true }
 }
-// Hauteur d'une corde à l'abscisse x, sur sa partie en éventail (entre la mécanique et le sillet)
+const HEAD = computed(() => {
+  const nut = NUT_X - 8
+  const top = woodTop - 4
+  const bottom = woodTop + woodHeight.value + 4
+  const first = postOf(0)
+  const last = postOf(stringCount.value - 1)
+  // Bord des mécaniques : droite parallèle à la rangée de mécaniques, un peu au-dessus
+  const slope = (last.y - first.y) / (first.x - last.x)
+  const topEdge = (x) => first.y - EDGE_GAP + (first.x - x) * slope
+  const tip = { x: 0, y: topEdge(0) + 10 } // pointe, légèrement sous le bord
+  return { nut, top, bottom, first, tip, topEdge }
+})
 function fanY(s, x) {
   const p = postOf(s)
   if (x >= NUT_X) return stringY(s)
@@ -126,22 +137,21 @@ const handZone = computed(() => {
   return { x: x1, w: fretX(to) - x1 }
 })
 
-// Tête : gorge incurvée au sortir du sillet, puis bords droits qui s'évasent ; elle se prolonge
-// jusqu'au bord gauche où un fondu la fait disparaître (forme volontairement incomplète)
+// Contour : gorge incurvée au sortir du sillet, bord en biais des mécaniques jusqu'à la pointe,
+// puis le dessous presque horizontal qui revient vers le sillet (adouci par un fondu)
 const headPath = computed(() => {
-  const nut = NUT_X - 8
-  const top = woodTop - 4
-  const bottom = woodTop + woodHeight.value + 4
+  const { nut, top, bottom, first, tip, topEdge } = HEAD.value
   return [
     `M ${nut} ${top}`,
-    `C ${nut - 24} ${top} ${nut - 30} ${top - 28} ${nut - 52} ${top - 28}`,
-    `L 0 ${top - 34}`,
-    `L 0 ${bottom + 34}`,
-    `L ${nut - 52} ${bottom + 28}`,
-    `C ${nut - 30} ${bottom + 28} ${nut - 24} ${bottom} ${nut} ${bottom}`,
+    `C ${nut - 16} ${top} ${first.x + 14} ${topEdge(first.x) - 6} ${first.x} ${topEdge(first.x)}`,
+    `L ${tip.x} ${tip.y}`,
+    `L ${tip.x + 40} ${bottom + 18}`,
+    `C ${nut - 60} ${bottom + 22} ${nut - 20} ${bottom} ${nut} ${bottom}`,
     'Z',
   ].join(' ')
 })
+// Logo sous la dernière corde, le long du bas de la tête
+const logo = computed(() => ({ x: (NUT_X + HEAD.value.tip.x) / 2, y: HEAD.value.bottom + 2, angle: 0 }))
 
 // Corps façon Telecaster, vu près de la jonction avec le manche (le corps passe sous la touche) :
 //  - côté aigus (en haut) : un pan coupé profond en U, dont le pavillon repart vers la tête et sort du cadre
@@ -233,8 +243,8 @@ const isWound = (s) => s >= 3
         </linearGradient>
         <!-- Fondu de la tête vers la gauche -->
         <linearGradient id="head-fade-grad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stop-color="#000" />
-          <stop offset="0.6" stop-color="#fff" />
+          <stop offset="0" stop-color="#555" />
+          <stop offset="0.4" stop-color="#fff" />
         </linearGradient>
         <linearGradient id="body-fade-grad" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0.85" stop-color="#fff" />
@@ -283,17 +293,10 @@ const isWound = (s) => s >= 3
         <path :d="headPath" fill="url(#head)" stroke="#5a5048" stroke-width="2" />
         <path :d="headPath" fill="#fff" filter="url(#grain)" opacity="0.6" />
         <!-- Logo -->
-        <text
-          :x="NUT_X - 100"
-          :y="(TOP + neckBottom) / 2 + 7"
-          text-anchor="middle"
-          class="fill-stone-300/70 font-black italic"
-          font-size="21"
-          letter-spacing="-0.5"
-        >
-          Fretboard
-        </text>
-        <text :x="NUT_X - 100" :y="(TOP + neckBottom) / 2 + 24" text-anchor="middle" class="fill-copper-400/70 font-bold tracking-[0.35em]" font-size="9">LIVE</text>
+        <g :transform="`translate(${logo.x} ${logo.y}) rotate(${logo.angle})`">
+          <text text-anchor="middle" class="fill-stone-300/70 font-black italic" font-size="18" letter-spacing="-0.5">Fretboard</text>
+          <text y="14" text-anchor="middle" class="fill-copper-400/70 font-bold tracking-[0.35em]" font-size="8">LIVE</text>
+        </g>
         <!-- Cordes en éventail du sillet aux mécaniques -->
         <line
           v-for="(open, s) in tuning"
@@ -391,7 +394,7 @@ const isWound = (s) => s >= 3
       <text
         v-for="(open, s) in tuning"
         :key="'o' + s"
-        :x="postOf(s).x - 16"
+        :x="postOf(s).x - 13"
         :y="postOf(s).y + 5"
         text-anchor="end"
         class="fill-neutral-300 text-[13px] font-bold"
