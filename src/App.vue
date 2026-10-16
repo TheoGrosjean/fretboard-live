@@ -22,7 +22,7 @@ import {
   pitchClass,
 } from './lib/music'
 import { keyFromTitle } from './lib/keyFromTitle'
-import { BODY_FINISHES, DEFAULT_BODY_FINISH } from './lib/noteStyles'
+import { BODY_FINISHES, DEFAULT_BODY_FINISH, applyAccent } from './lib/noteStyles'
 import { positionKey, scaleBoxes } from './lib/boxes'
 import { PHRASE_GAP_MS, PHRASE_LENGTH, REVISABLE, bestFingering, handFrom, rootBox } from './lib/fingering'
 
@@ -46,6 +46,7 @@ const frets = persisted('frets', 22)
 const showAlternates = persisted('showAlternates', true)
 const bodyFinish = persisted('bodyFinish', DEFAULT_BODY_FINISH)
 const matchHead = persisted('matchHead', false)
+watch(bodyFinish, applyAccent, { immediate: true }) // le thème du site suit la finition de la guitare
 const boxIndex = persisted('boxIndex', 0) // 0 = tout le manche, sinon numéro de la box
 
 const tuning = STANDARD_TUNING

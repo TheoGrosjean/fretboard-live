@@ -51,15 +51,30 @@ export function alternateMark(palette, { outside }) {
 }
 
 /** Finitions unies du corps de la guitare. */
+// accent : teintes 300 → 600 de la couleur d'accent du site, assortie à la finition
+const COPPER = ['#f5b48f', '#f0956a', '#e2683a', '#c2522a']
 export const BODY_FINISHES = [
-  { id: 'black', name: 'Noir satiné', color: '#1c1c1e' },
-  { id: 'cream', name: 'Crème vintage', color: '#e6dcc6' },
-  { id: 'copper', name: 'Cuivre métallisé', color: '#a8552f' },
-  { id: 'burgundy', name: 'Bordeaux', color: '#5e1a26' },
-  { id: 'navy', name: 'Bleu nuit', color: '#1b2a44' },
-  { id: 'sonic', name: 'Sonic Blue', color: '#8fb1c4' },
+  { id: 'black', name: 'Noir satiné', color: '#1c1c1e', accent: COPPER },
+  { id: 'cream', name: 'Crème vintage', color: '#e6dcc6', accent: ['#f3dcae', '#e8c47e', '#d4a24c', '#b08433'] },
+  { id: 'copper', name: 'Cuivre métallisé', color: '#a8552f', accent: COPPER },
+  { id: 'burgundy', name: 'Bordeaux', color: '#5e1a26', accent: ['#f4a7b4', '#ec7a8e', '#d94a64', '#b3324b'] },
+  { id: 'navy', name: 'Bleu nuit', color: '#1b2a44', accent: ['#b0c9f6', '#82a8ee', '#5784dc', '#3d68bf'] },
+  { id: 'sonic', name: 'Sonic Blue', color: '#8fb1c4', accent: ['#bfe2f0', '#8fcbe2', '#5fb2d1', '#4593b2'] },
 ]
 
 export const DEFAULT_BODY_FINISH = 'black'
 
 export const findBodyFinish = (id) => BODY_FINISHES.find((f) => f.id === id) ?? BODY_FINISHES[0]
+
+/** Palette « cuivre » des notes recolorée avec l'accent de la finition. */
+export function accentPalette(palette, finishId) {
+  if (palette.id !== 'copper') return palette
+  const [a300, a400, a500] = findBodyFinish(finishId).accent
+  return { ...palette, root: a400, played: a500, alternate: a300, sub: a300 }
+}
+
+/** Applique l'accent de la finition aux variables CSS du site (--color-copper-*). */
+export function applyAccent(finishId) {
+  const accent = findBodyFinish(finishId).accent
+  ;[300, 400, 500, 600].forEach((n, i) => document.documentElement.style.setProperty(`--color-copper-${n}`, accent[i]))
+}

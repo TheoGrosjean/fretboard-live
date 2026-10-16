@@ -101,15 +101,13 @@ onBeforeUnmount(() => timers.forEach(clearTimeout))
 
       <!-- Arpège de notes cuivre -->
       <g v-for="(n, i) in NOTES" :key="'n' + i">
-        <circle class="ping" :style="{ animationDelay: n.delay + 's' }" :cx="n.x" :cy="n.y" r="11" fill="none" stroke="#f0956a" stroke-width="2" />
+        <circle class="ping" :style="{ animationDelay: n.delay + 's', stroke: 'var(--color-copper-400)' }" :cx="n.x" :cy="n.y" r="11" fill="none" stroke-width="2" />
         <circle
           class="note"
-          :style="{ animationDelay: n.delay + 's' }"
           :cx="n.x"
           :cy="n.y"
           r="11"
-          :fill="n.root ? '#e2683a' : '#1c1917'"
-          :stroke="n.root ? '#f5b48f' : '#f0956a'"
+          :style="{ animationDelay: n.delay + 's', fill: n.root ? 'var(--color-copper-500)' : '#1c1917', stroke: n.root ? 'var(--color-copper-300)' : 'var(--color-copper-400)' }"
           stroke-width="2"
         />
       </g>

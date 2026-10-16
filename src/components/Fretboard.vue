@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { noteName, pitchClass } from '../lib/music'
-import { DEFAULT_BODY_FINISH, DEFAULT_PALETTE, alternateMark, findBodyFinish, findPalette, playedMark, scaleMark } from '../lib/noteStyles'
+import { DEFAULT_BODY_FINISH, DEFAULT_PALETTE, accentPalette, alternateMark, findBodyFinish, findPalette, playedMark, scaleMark } from '../lib/noteStyles'
 import NoteMark from './NoteMark.vue'
 
 const props = defineProps({
@@ -92,7 +92,7 @@ function label(midi, info) {
   return noteName(midi, props.notation)
 }
 
-const colors = computed(() => findPalette(props.palette))
+const colors = computed(() => accentPalette(findPalette(props.palette), props.bodyFinish))
 const bodyColor = computed(() => findBodyFinish(props.bodyFinish).color)
 // Finition claire : logo de la tête en foncé pour rester lisible
 const lightHead = computed(() => {

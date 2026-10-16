@@ -126,7 +126,7 @@ const TONES = {
 .fx-settle .word {
   color: #fde3c8;
   text-shadow:
-    0 0 18px rgba(240, 149, 106, 0.7),
+    0 0 18px color-mix(in srgb, var(--color-copper-400) 70%, transparent),
     0 4px 24px rgba(0, 0, 0, 0.85);
 }
 .fx-settle .ch {
@@ -208,7 +208,7 @@ const TONES = {
 
 /* 3 · Lumineux : reflet qui balaie le texte */
 .fx-shine .word {
-  background: linear-gradient(100deg, #f5b48f 20%, #fffaf0 45%, #f5b48f 70%);
+  background: linear-gradient(100deg, var(--color-copper-300) 20%, #fffaf0 45%, var(--color-copper-300) 70%);
   background-size: 250% 100%;
   background-clip: text;
   -webkit-background-clip: text;
@@ -265,7 +265,7 @@ const TONES = {
 .fx-punch .word {
   color: #fff;
   font-size: 1.25em;
-  -webkit-text-stroke: 1px #e2683a;
+  -webkit-text-stroke: 1px var(--color-copper-500);
   animation: punch 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both;
 }
 @keyframes punch {
@@ -320,7 +320,7 @@ const TONES = {
 
 /* b7 · Bluesy : les lettres se balancent comme un pendule */
 .fx-swing .word {
-  color: #f0956a;
+  color: var(--color-copper-400);
   font-style: italic;
 }
 .fx-swing .ch {

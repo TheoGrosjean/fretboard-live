@@ -103,11 +103,11 @@ const score = useCountUp(props.result.score, { delay: 1300, duration: 1100, free
   right: -10%;
   top: 40%;
   height: 0.6cqh;
-  background: linear-gradient(90deg, transparent, #fff, #f0956a, transparent);
+  background: linear-gradient(90deg, transparent, #fff, var(--color-copper-400), transparent);
   transform: rotate(-7deg) scaleX(0);
   transform-origin: left;
   animation: slash 0.22s ease-in 0.08s forwards;
-  filter: drop-shadow(0 0 1.5cqw #f0956a);
+  filter: drop-shadow(0 0 1.5cqw var(--color-copper-400));
 }
 @keyframes slash {
   80% {
@@ -127,8 +127,8 @@ const score = useCountUp(props.result.score, { delay: 1300, duration: 1100, free
   height: 26cqh;
   transform: rotate(-7deg);
   background: #0b0b0b;
-  border-top: 0.8cqh solid #e2683a;
-  border-bottom: 0.8cqh solid #e2683a;
+  border-top: 0.8cqh solid var(--color-copper-500);
+  border-bottom: 0.8cqh solid var(--color-copper-500);
   box-shadow: 0 2cqh 6cqh rgba(0, 0, 0, 0.8);
   clip-path: inset(0 100% 0 0);
   animation: wipe 0.28s cubic-bezier(0.7, 0, 0.3, 1) 0.22s forwards;
@@ -145,7 +145,7 @@ const score = useCountUp(props.result.score, { delay: 1300, duration: 1100, free
 .stripes {
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(-60deg, transparent 0 3cqw, rgba(226, 104, 58, 0.12) 3cqw 4cqw);
+  background: repeating-linear-gradient(-60deg, transparent 0 3cqw, color-mix(in srgb, var(--color-copper-500) 12%, transparent) 3cqw 4cqw);
   animation: stripes 1.2s linear infinite;
 }
 @keyframes stripes {
@@ -160,10 +160,10 @@ const score = useCountUp(props.result.score, { delay: 1300, duration: 1100, free
   font-style: italic;
   letter-spacing: -0.02em;
   color: #fff;
-  -webkit-text-stroke: 0.25cqh #e2683a;
+  -webkit-text-stroke: 0.25cqh var(--color-copper-500);
   text-shadow:
-    0.8cqw 0.8cqh 0 #c2522a,
-    0 0 4cqw rgba(240, 149, 106, 0.6);
+    0.8cqw 0.8cqh 0 var(--color-copper-600),
+    0 0 4cqw color-mix(in srgb, var(--color-copper-400) 60%, transparent);
   opacity: 0;
   animation:
     slam 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) 0.42s forwards,
@@ -216,11 +216,11 @@ const score = useCountUp(props.result.score, { delay: 1300, duration: 1100, free
   font-weight: 900;
 }
 .rank-S {
-  color: #fbbf77;
-  filter: drop-shadow(0 0 2cqh rgba(251, 191, 119, 0.7));
+  color: var(--color-copper-300);
+  filter: drop-shadow(0 0 2cqh color-mix(in srgb, var(--color-copper-300) 70%, transparent));
 }
 .rank-A {
-  color: #f0956a;
+  color: var(--color-copper-400);
 }
 .rank-B {
   color: #d6d3d1;
@@ -290,7 +290,7 @@ const score = useCountUp(props.result.score, { delay: 1300, duration: 1100, free
   font-weight: 900;
   letter-spacing: 0.25em;
   color: #0b0b0b;
-  background: #f0956a;
+  background: var(--color-copper-400);
   opacity: 0;
   animation:
     rise 0.3s ease 2s forwards,
