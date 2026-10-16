@@ -22,6 +22,7 @@ import {
   pitchClass,
 } from './lib/music'
 import { keyFromTitle } from './lib/keyFromTitle'
+import { BODY_FINISHES, DEFAULT_BODY_FINISH } from './lib/noteStyles'
 import { positionKey, scaleBoxes } from './lib/boxes'
 import { PHRASE_GAP_MS, PHRASE_LENGTH, REVISABLE, bestFingering, handFrom, rootBox } from './lib/fingering'
 
@@ -43,6 +44,7 @@ const notation = persisted('notation', 'fr')
 const labelMode = persisted('labelMode', 'note')
 const frets = persisted('frets', 22)
 const showAlternates = persisted('showAlternates', true)
+const bodyFinish = persisted('bodyFinish', DEFAULT_BODY_FINISH)
 const boxIndex = persisted('boxIndex', 0) // 0 = tout le manche, sinon numéro de la box
 
 const tuning = STANDARD_TUNING
@@ -487,6 +489,22 @@ function toggleAudio() {
               </div>
             </div>
 
+            <div>
+              <span class="field-label">Couleur du corps</span>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="f in BODY_FINISHES"
+                  :key="f.id"
+                  :title="f.name"
+                  :aria-label="f.name"
+                  class="size-7 rounded-full ring-offset-2 ring-offset-neutral-900 transition"
+                  :class="bodyFinish === f.id ? 'ring-2 ring-copper-400' : 'ring-1 ring-white/15 hover:ring-white/40'"
+                  :style="{ background: f.color }"
+                  @click="bodyFinish = f.id"
+                />
+              </div>
+            </div>
+
             <div class="grid grid-cols-2 items-end gap-3">
               <label class="block">
                 <span class="field-label">Cases</span>
@@ -564,6 +582,7 @@ function toggleAudio() {
           :overlay="overlay"
           :notation="notation"
           :label-mode="labelMode"
+          :body-finish="bodyFinish"
           :played="played"
           :alternates="alternates"
           :anchor="anchor"
