@@ -8,31 +8,26 @@ const props = defineProps({
   min: { type: Number, default: 0 },
   max: { type: Number, default: 10 },
   step: { type: Number, default: 0.1 },
-  size: { type: Number, default: 72 },
+  size: { type: Number, default: 76 },
 })
 const model = defineModel({ type: Number, required: true })
 
-const SWEEP = 270 // course du potard en degrés
+const SWEEP = 300 // course du potard en degrés
 const clamp = (v) => Math.min(props.max, Math.max(props.min, Math.round(v / props.step) * props.step))
 const ratio = computed(() => (model.value - props.min) / (props.max - props.min))
 const angle = computed(() => -SWEEP / 2 + ratio.value * SWEEP)
 
-// Arc de valeur autour du potard
-const R = 44
-const polar = (deg) => {
+// Graduations sérigraphiées autour du potard, de 0 à 10
+const polar = (deg, r) => {
   const a = ((deg - 90) * Math.PI) / 180
-  return [50 + R * Math.cos(a), 50 + R * Math.sin(a)]
+  return [50 + r * Math.cos(a), 50 + r * Math.sin(a)]
 }
-const arc = (from, to) => {
-  const [x1, y1] = polar(from)
-  const [x2, y2] = polar(to)
-  return `M ${x1} ${y1} A ${R} ${R} 0 ${to - from > 180 ? 1 : 0} 1 ${x2} ${y2}`
-}
-const track = arc(-SWEEP / 2, SWEEP / 2)
-const valueArc = computed(() => (ratio.value > 0.001 ? arc(-SWEEP / 2, angle.value) : ''))
 const ticks = Array.from({ length: 11 }, (_, i) => {
-  const [x1, y1] = polar(-SWEEP / 2 + (i / 10) * SWEEP)
-  return { x1, y1, x2: 50 + (x1 - 50) * 1.13, y2: 50 + (y1 - 50) * 1.13 }
+  const deg = -SWEEP / 2 + (i / 10) * SWEEP
+  const [x1, y1] = polar(deg, 41)
+  const [x2, y2] = polar(deg, i % 5 === 0 ? 47 : 45)
+  const [tx, ty] = polar(deg, 55)
+  return { x1, y1, x2, y2, tx, ty, n: i, major: i % 5 === 0 }
 })
 
 let startY = 0
@@ -59,12 +54,12 @@ function onKey(e) {
 </script>
 
 <template>
-  <div class="flex flex-col items-center gap-1.5 select-none">
+  <div class="knob flex flex-col items-center select-none">
     <svg
       :width="size"
       :height="size"
-      viewBox="-6 -6 112 112"
-      class="cursor-ns-resize touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-copper-400"
+      viewBox="-14 -14 128 128"
+      class="cursor-ns-resize touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-black/50"
       role="slider"
       tabindex="0"
       :aria-label="label"
@@ -78,23 +73,48 @@ function onKey(e) {
       @dblclick="model = defaultValue"
     >
       <defs>
-        <radialGradient id="knob-cap" cx="0.4" cy="0.3" r="0.8">
-          <stop offset="0" stop-color="#4a4541" />
-          <stop offset="0.6" stop-color="#1f1c1a" />
-          <stop offset="1" stop-color="#0e0c0b" />
+        <radialGradient id="knob-skirt" cx="0.45" cy="0.35" r="0.75">
+          <stop offset="0" stop-color="#3b3632" />
+          <stop offset="1" stop-color="#0c0a09" />
         </radialGradient>
+        <radialGradient id="knob-top" cx="0.35" cy="0.3" r="0.9">
+          <stop offset="0" stop-color="#fff7e0" />
+          <stop offset="0.35" stop-color="#e9c98a" />
+          <stop offset="0.75" stop-color="#a77b38" />
+          <stop offset="1" stop-color="#6b4a1c" />
+        </radialGradient>
+        <filter id="knob-shadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000" flood-opacity="0.55" />
+        </filter>
       </defs>
-      <line v-for="(t, i) in ticks" :key="i" :x1="t.x1" :y1="t.y1" :x2="t.x2" :y2="t.y2" stroke="#57534e" stroke-width="1.5" />
-      <path :d="track" fill="none" stroke="#292524" stroke-width="5" stroke-linecap="round" />
-      <path v-if="valueArc" :d="valueArc" fill="none" style="stroke: var(--color-copper-400)" stroke-width="5" stroke-linecap="round" />
-      <!-- Jupe crantée + capuchon -->
-      <circle cx="50" cy="50" r="35" fill="#0b0a09" stroke="#3f3a36" stroke-width="2" stroke-dasharray="2 2.4" />
-      <circle cx="50" cy="50" r="30" fill="url(#knob-cap)" stroke="#000" stroke-width="1" />
-      <g :transform="`rotate(${angle} 50 50)`">
-        <line x1="50" y1="24" x2="50" y2="38" stroke="#f5f5f4" stroke-width="3.5" stroke-linecap="round" />
+      <!-- Sérigraphie -->
+      <g class="silk">
+        <line v-for="t in ticks" :key="'t' + t.n" :x1="t.x1" :y1="t.y1" :x2="t.x2" :y2="t.y2" :stroke-width="t.major ? 2.2 : 1.4" />
+        <text v-for="t in ticks.filter((t) => t.major)" :key="'n' + t.n" :x="t.tx" :y="t.ty + 5" text-anchor="middle" font-size="14" font-weight="800">{{ t.n }}</text>
+      </g>
+      <!-- Jupe noire crantée + capuchon doré, qui tournent ensemble -->
+      <g :transform="`rotate(${angle} 50 50)`" filter="url(#knob-shadow)">
+        <circle cx="50" cy="50" r="36" fill="url(#knob-skirt)" />
+        <circle cx="50" cy="50" r="36" fill="none" stroke="#000" stroke-width="3" stroke-dasharray="2.2 2.6" opacity="0.7" />
+        <circle cx="50" cy="50" r="22" fill="url(#knob-top)" stroke="#3a2a12" stroke-width="1" />
+        <circle cx="50" cy="50" r="15" fill="none" stroke="#fff3" stroke-width="0.8" />
+        <line x1="50" y1="16" x2="50" y2="31" stroke="#f5f5f4" stroke-width="4" stroke-linecap="round" />
       </g>
     </svg>
-    <div class="text-[11px] font-bold tracking-[0.2em] text-neutral-300 uppercase">{{ label }}</div>
-    <div class="-mt-1 text-[11px] text-neutral-500 tabular-nums">{{ model.toFixed(1) }}</div>
+    <div class="label -mt-1 text-[11px] font-black tracking-[0.22em] uppercase">{{ label }}</div>
   </div>
 </template>
+
+<style scoped>
+/* Couleur de sérigraphie héritée de la façade (variable --silk) */
+.silk line {
+  stroke: var(--silk, #1c1917);
+}
+.silk text {
+  fill: var(--silk, #1c1917);
+  opacity: 0.85;
+}
+.label {
+  color: var(--silk, #1c1917);
+}
+</style>
