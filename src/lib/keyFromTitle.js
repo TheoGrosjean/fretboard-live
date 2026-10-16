@@ -59,11 +59,22 @@ export function keyFromTitle(rawTitle) {
   const musical = MUSIC_CONTEXT.test(title)
   const candidates = []
 
-  // Notation anglo-saxonne : A, Bb, F#, C-sharp, E flat… (majuscule obligatoire)
-  const en = /(?<![\p{L}\d#])([A-G])(#|b(?![a-ln-z])|[\s-]?sharp\b|[\s-]?flat\b)?/gu
+  // Notation anglo-saxonne : A, Bb, F#, C-sharp, E flat… et en minuscules (« a minor », « bb minor »)
+  const en = /(?<![\p{L}\d#])([A-Ga-g])(#|b(?![a-ln-z])|[\s-]?sharp\b|[\s-]?flat\b)?/gu
   for (const m of title.matchAll(en)) {
-    const root = (EN_NOTES[m[1]] + accidentalShift(m[2]) + 12) % 12
+    const root = (EN_NOTES[m[1].toUpperCase()] + accidentalShift(m[2]) + 12) % 12
     const rest = title.slice(m.index + m[0].length)
+    const before = title.slice(0, m.index)
+
+    // En minuscule, « a » ou « e » sont surtout des mots courants (« just a minor problem ») :
+    // on exige un mot de mode, et une note en début de titre, après « in / key of », ou un titre musical
+    if (m[1] === m[1].toLowerCase()) {
+      if (/^[\p{L}\d]/u.test(rest)) continue
+      const mode = matchMode(rest)
+      const placed = !before.trim() || /(\bin|\bkey of|\bkey|\ben)\s+$/i.test(before)
+      if (mode && (placed || musical)) candidates.push({ root, ...mode, score: 3, text: m[0].toUpperCase() })
+      continue
+    }
 
     // Forme compacte : Am, F#m, Bbm7, Cmaj
     const compact = /^(maj|min|m)(?![\p{L}])/u.exec(rest)
@@ -79,7 +90,6 @@ export function keyFromTitle(rawTitle) {
       continue
     }
     // Note seule : « in A », « key of E », « en Sol » dans un titre musical
-    const before = title.slice(0, m.index)
     const after = rest.trimStart()
     if (musical && /(\bin|\bkey of|\bkey|\ben|\btonalite de|\btonalite)\s+$/i.test(before) && (!after || /^[-–(|,[/:]/.test(after) || MUSIC_CONTEXT.test(after.split(/\s+/)[0]))) {
       candidates.push({ root, score: 1, text: m[0] })
