@@ -23,7 +23,8 @@ const BODY_W = 140 // partie visible du corps, à droite de la dernière case
 const WIDTH = 1560 + BODY_W
 const NUT_X = 200 // laisse la place à la tête de la guitare, à gauche du sillet
 const END_X = WIDTH - BODY_W - 20 // fin de la touche (dernière case)
-const TOP = 66 // place au-dessus des cordes pour l'évasement de la tête
+const MARGIN_Y = 64 // place au-dessus et en dessous du manche (tête évasée, corps)
+const TOP = 26 + MARGIN_Y
 const SPACING = 54
 const NOTE_SIZE = 40 // largeur des notes
 const EDGE = 26 // débord du bois au-delà des cordes extrêmes
@@ -32,7 +33,7 @@ const stringCount = computed(() => props.tuning.length)
 const neckBottom = computed(() => TOP + (stringCount.value - 1) * SPACING)
 const woodTop = TOP - EDGE
 const woodHeight = computed(() => neckBottom.value - TOP + EDGE * 2)
-const height = computed(() => neckBottom.value + EDGE + 40)
+const height = computed(() => neckBottom.value + EDGE + MARGIN_Y)
 
 // Mélange entre l'espacement réel des frettes et un espacement linéaire,
 // pour garder des cases lisibles dans les aigus.
@@ -137,32 +138,28 @@ const headPath = computed(() => {
   ].join(' ')
 })
 
-// Corps : pans coupés incurvés de part et d'autre du manche, qui sortent du cadre en haut et en bas ;
-// il s'efface en fondu vers la droite, comme la tête vers la gauche
-const bodyPath = computed(() => {
-  const top = woodTop - 4
-  const bottom = woodTop + woodHeight.value + 4
-  return [
-    `M ${END_X} ${top}`,
-    `C ${END_X + 34} ${top} ${END_X + 40} 0 ${END_X + 78} 0`,
-    `L ${WIDTH} 0`,
-    `L ${WIDTH} ${height.value}`,
-    `L ${END_X + 78} ${height.value}`,
-    `C ${END_X + 40} ${height.value} ${END_X + 34} ${bottom} ${END_X} ${bottom}`,
-    'Z',
+// Corps façon Telecaster, vu près de la jonction avec le manche (le corps passe sous la touche) :
+//  - côté aigus (en haut) : un pan coupé profond en U, dont le pavillon repart vers la tête et sort du cadre
+//  - côté graves (en bas) : une épaule arrondie qui rejoint le manche avec une petite encoche
+// Le contour sort du cadre ; il s'efface en fondu vers la droite, le haut et le bas.
+const BODY_START = END_X - 500 // bord gauche de la zone du corps (épaule côté graves)
+// Proportions d'une Telecaster rapportées à la largeur du manche : l'épaule rejoint le manche
+// vers la 16e case, le pan coupé démarre vers la 20e ; le reste sort du cadre
+const bodyGeometry = computed(() => {
+  const E = END_X
+  const T = woodTop - 4
+  const B = woodTop + woodHeight.value + 4
+  const cutaway = `M ${E - 177} ${T} C ${E - 120} ${T - 8} ${E - 70} ${T - 110} ${E - 62} ${T - 198} C ${E - 55} ${T - 260} ${E - 200} ${T - 400} ${E - 385} ${T - 489}`
+  const shoulder = `M ${E - 420} ${B - 2} L ${E - 426} ${B + 4} C ${E - 450} ${B + 120} ${E - 470} ${B + 300} ${E - 488} ${B + 416}`
+  const fill = [
+    cutaway,
+    `L ${WIDTH + 40} ${T - 489} L ${WIDTH + 40} ${B + 500} L ${E - 488} ${B + 500} L ${E - 488} ${B + 416}`,
+    `C ${E - 470} ${B + 300} ${E - 450} ${B + 120} ${E - 426} ${B + 4} L ${E - 420} ${B - 2} L ${E - 177} ${T} Z`,
   ].join(' ')
+  return { fill, edges: [cutaway, shoulder] }
 })
-// Liseré des pans coupés seulement (les bords droits du corps sont hors champ)
-const cutawayPaths = computed(() => {
-  const top = woodTop - 4
-  const bottom = woodTop + woodHeight.value + 4
-  return [
-    `M ${END_X} ${top} C ${END_X + 34} ${top} ${END_X + 40} 0 ${END_X + 78} 0`,
-    `M ${END_X} ${bottom} C ${END_X + 34} ${bottom} ${END_X + 40} ${height.value} ${END_X + 78} ${height.value}`,
-  ]
-})
-// Micro humbucker (position manche) : deux bobines côte à côte
-const PICKUP = { x: END_X + 30, w: 58 }
+// Micro manche capoté chromé, sur une plaque terminée en pointe vers le chevalet
+const PICKUP = { x: END_X + 34, w: 26 }
 
 const stringWidth = (s) => 1.2 + (s / Math.max(1, stringCount.value - 1)) * 2.6
 const isWound = (s) => s >= 3
@@ -233,25 +230,32 @@ const isWound = (s) => s >= 3
           <stop offset="0.6" stop-color="#fff" />
         </linearGradient>
         <linearGradient id="body-fade-grad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0.35" stop-color="#fff" />
+          <stop offset="0.85" stop-color="#fff" />
           <stop offset="1" stop-color="#000" />
         </linearGradient>
-        <mask id="body-fade" maskUnits="userSpaceOnUse" :x="END_X" y="0" :width="WIDTH - END_X" :height="height">
-          <rect :x="END_X" y="0" :width="WIDTH - END_X" :height="height" fill="url(#body-fade-grad)" />
+        <mask id="body-fade" maskUnits="userSpaceOnUse" :x="BODY_START" y="0" :width="WIDTH - BODY_START" :height="height">
+          <rect :x="BODY_START" y="0" :width="WIDTH - BODY_START" :height="height" fill="url(#body-fade-grad)" />
         </mask>
         <!-- Fondu vertical du corps : il se dissout vers le haut et le bas du cadre -->
         <linearGradient id="body-fade-v-grad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="#000" />
-          <stop offset="0.12" stop-color="#fff" />
-          <stop offset="0.88" stop-color="#fff" />
+          <stop offset="0.06" stop-color="#fff" />
+          <stop offset="0.94" stop-color="#fff" />
           <stop offset="1" stop-color="#000" />
         </linearGradient>
-        <mask id="body-fade-v" maskUnits="userSpaceOnUse" :x="END_X" y="0" :width="WIDTH - END_X" :height="height">
-          <rect :x="END_X" y="0" :width="WIDTH - END_X" :height="height" fill="url(#body-fade-v-grad)" />
+        <mask id="body-fade-v" maskUnits="userSpaceOnUse" :x="BODY_START" y="0" :width="WIDTH - BODY_START" :height="height">
+          <rect :x="BODY_START" y="0" :width="WIDTH - BODY_START" :height="height" fill="url(#body-fade-v-grad)" />
         </mask>
         <mask id="head-fade" maskUnits="userSpaceOnUse" x="0" y="0" :width="NUT_X" :height="height">
           <rect x="0" y="0" :width="NUT_X" :height="height" fill="url(#head-fade-grad)" />
         </mask>
+        <!-- Capot de micro chromé -->
+        <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#7d8188" />
+          <stop offset="0.45" stop-color="#f1f3f5" />
+          <stop offset="0.6" stop-color="#c5c9cf" />
+          <stop offset="1" stop-color="#6d7178" />
+        </linearGradient>
         <!-- Axes des mécaniques chromés -->
         <radialGradient id="post" cx="0.35" cy="0.3" r="0.8">
           <stop offset="0" stop-color="#ffffff" />
@@ -295,36 +299,22 @@ const isWound = (s) => s >= 3
         </g>
       </g>
 
-      <!-- Corps de la guitare (s'efface vers la droite) -->
+      <!-- Corps de la guitare façon Telecaster (s'efface vers la droite, le haut et le bas) -->
       <g mask="url(#body-fade)">
-       <g mask="url(#body-fade-v)">
-        <path :d="bodyPath" fill="url(#head)" />
-        <path :d="bodyPath" fill="#fff" filter="url(#grain)" opacity="0.6" />
-        <path v-for="(d, i) in cutawayPaths" :key="'cut' + i" :d="d" fill="none" stroke="#5a5048" stroke-width="2" />
-       </g>
-        <!-- Micro : cadre, deux bobines, un plot chromé par corde et par bobine -->
-        <rect :x="PICKUP.x - 6" :y="TOP - 30" :width="PICKUP.w + 12" :height="neckBottom - TOP + 60" rx="8" fill="#0b0b0b" stroke="#3a3a3a" stroke-width="1.5" />
-        <rect
-          v-for="coil in 2"
-          :key="'coil' + coil"
-          :x="PICKUP.x + (coil - 1) * (PICKUP.w / 2) + 2"
-          :y="TOP - 22"
-          :width="PICKUP.w / 2 - 4"
-          :height="neckBottom - TOP + 44"
-          rx="5"
-          fill="#151515"
-          stroke="#262626"
+        <g mask="url(#body-fade-v)">
+          <path :d="bodyGeometry.fill" fill="url(#head)" />
+          <path :d="bodyGeometry.fill" fill="#fff" filter="url(#grain)" opacity="0.6" />
+          <path v-for="(d, i) in bodyGeometry.edges" :key="'edge' + i" :d="d" fill="none" stroke="#5a5048" stroke-width="2" />
+        </g>
+        <!-- Plaque du micro, en pointe vers le chevalet -->
+        <path
+          :d="`M ${PICKUP.x - 10} ${TOP - 34} H ${PICKUP.x + PICKUP.w + 10} L ${PICKUP.x + PICKUP.w + 30} ${(TOP + neckBottom) / 2} L ${PICKUP.x + PICKUP.w + 10} ${neckBottom + 34} H ${PICKUP.x - 10} Q ${PICKUP.x - 20} ${neckBottom + 34} ${PICKUP.x - 20} ${neckBottom + 24} V ${TOP - 24} Q ${PICKUP.x - 20} ${TOP - 34} ${PICKUP.x - 10} ${TOP - 34} Z`"
+          fill="#111"
+          stroke="#3a3a3a"
+          stroke-width="1.5"
         />
-        <template v-for="coil in 2" :key="'poles' + coil">
-          <circle
-            v-for="(open, s) in tuning"
-            :key="'pole' + coil + s"
-            :cx="PICKUP.x + (coil - 0.5) * (PICKUP.w / 2)"
-            :cy="stringY(s)"
-            r="4"
-            fill="url(#post)"
-          />
-        </template>
+        <!-- Capot chromé -->
+        <rect :x="PICKUP.x" :y="TOP - 24" :width="PICKUP.w" :height="neckBottom - TOP + 48" rx="12" fill="url(#chrome)" stroke="#6b7078" />
         <!-- Cordes qui continuent sur le corps -->
         <line
           v-for="(open, s) in tuning"
