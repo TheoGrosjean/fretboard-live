@@ -64,7 +64,7 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
 </script>
 
 <template>
-  <section class="flex flex-col rounded-2xl bg-neutral-900 p-5 ring-1 ring-white/5">
+  <section class="flex min-h-0 flex-col rounded-2xl bg-neutral-900 p-5 ring-1 ring-white/5">
     <div class="mb-4 flex items-center justify-between gap-3">
       <h2 class="flex items-center gap-2 text-xs font-semibold tracking-widest text-neutral-500 uppercase">
         <span class="size-2.5 rounded-full bg-[#1DB954]" /> Backing tracks
@@ -171,7 +171,7 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
         Suggestion : {{ suggestion }}
       </button>
 
-      <ul class="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1">
+      <ul class="mt-3 min-h-32 flex-1 space-y-1 overflow-y-auto pr-1">
         <li v-if="loading" class="py-4 text-center text-sm text-neutral-600">Chargement…</li>
         <template v-else-if="tab === 'search'">
           <li v-for="p in results.playlists" :key="p.id">

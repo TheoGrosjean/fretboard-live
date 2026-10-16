@@ -156,7 +156,7 @@ function toggleAudio() {
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-anthracite text-neutral-200">
+  <div class="flex h-screen overflow-hidden bg-anthracite text-neutral-200">
     <!-- ========== Barre latérale ========== -->
     <aside
       class="sticky top-0 flex h-screen shrink-0 flex-col border-r border-white/5 bg-neutral-900/70 backdrop-blur transition-[width] duration-200"
@@ -367,9 +367,9 @@ function toggleAudio() {
     </aside>
 
     <!-- ========== Contenu principal ========== -->
-    <main class="min-w-0 flex-1 px-6 py-6 lg:px-8">
+    <main class="flex h-screen min-w-0 flex-1 flex-col px-6 py-5 lg:px-8">
       <!-- En-tête : gamme courante + note jouée -->
-      <header class="mb-5 flex flex-wrap items-center justify-between gap-4">
+      <header class="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div>
           <div class="text-[11px] font-semibold tracking-widest text-neutral-500 uppercase">
             {{ overlayType === 'arpeggio' ? 'Arpège' : overlayType === 'scale' ? 'Gamme' : 'Manche libre' }}
@@ -423,7 +423,7 @@ function toggleAudio() {
         :anchor="anchor"
         @play="onFretClick"
       />
-      <div class="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 text-xs text-neutral-500">
+      <div class="mt-3 flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 text-xs text-neutral-500">
         <div class="flex flex-wrap items-center gap-4">
           <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-stone-900 ring-2 ring-copper-400" /> Tonique</span>
           <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-stone-900 ring-1 ring-stone-500" /> Gamme</span>
@@ -436,9 +436,9 @@ function toggleAudio() {
       </div>
 
       <!-- Accordeur + historique -->
-      <div class="mt-6 grid items-start gap-4 xl:grid-cols-2">
+      <div class="mt-4 grid min-h-0 flex-1 gap-4 overflow-y-auto xl:grid-cols-2 xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
         <SpotifyPlayer :suggestion="backingSuggestion" @track-change="onTrackChange" />
-        <div class="space-y-4">
+        <div class="flex min-h-0 flex-col gap-4">
           <Tuner :midi-float="audio.midiFloat.value" :frequency="audio.frequency.value" :notation="notation" />
           <NoteHistory :items="history" :notation="notation" @clear="history = []" />
         </div>

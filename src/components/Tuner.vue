@@ -16,7 +16,7 @@ const needle = computed(() => 50 + Math.max(-50, Math.min(50, cents.value)))
 </script>
 
 <template>
-  <section class="rounded-2xl bg-neutral-900 p-5 ring-1 ring-white/5">
+  <section class="shrink-0 rounded-2xl bg-neutral-900 p-5 ring-1 ring-white/5">
     <h2 class="mb-4 text-xs font-semibold tracking-widest text-neutral-500 uppercase">Accordeur</h2>
 
     <div class="flex items-end justify-between gap-4">

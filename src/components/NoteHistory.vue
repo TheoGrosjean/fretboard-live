@@ -9,7 +9,7 @@ defineEmits(['clear'])
 </script>
 
 <template>
-  <section class="rounded-2xl bg-neutral-900 p-5 ring-1 ring-white/5">
+  <section class="flex min-h-0 flex-1 flex-col rounded-2xl bg-neutral-900 p-5 ring-1 ring-white/5">
     <div class="mb-4 flex items-center justify-between">
       <h2 class="text-xs font-semibold tracking-widest text-neutral-500 uppercase">Historique</h2>
       <button v-if="items.length" class="text-xs text-neutral-500 hover:text-neutral-200" @click="$emit('clear')">Effacer</button>
@@ -17,7 +17,7 @@ defineEmits(['clear'])
 
     <p v-if="!items.length" class="text-sm text-neutral-600">Les notes jouées apparaîtront ici.</p>
 
-    <TransitionGroup v-else tag="ul" name="hist" class="flex flex-wrap gap-2">
+    <TransitionGroup v-else tag="ul" name="hist" class="flex min-h-0 flex-wrap content-start gap-2 overflow-y-auto">
       <li
         v-for="(n, i) in items"
         :key="n.id"
