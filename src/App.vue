@@ -2,10 +2,11 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import Fretboard from './components/Fretboard.vue'
 import Tuner from './components/Tuner.vue'
-import NoteHistory from './components/NoteHistory.vue'
+import ComboPanel from './components/ComboPanel.vue'
 import Icon from './components/Icon.vue'
 import SpotifyPlayer from './components/SpotifyPlayer.vue'
 import { useAudioInput } from './composables/useAudioInput'
+import { useCombo } from './composables/useCombo'
 import {
   ARPEGGIOS,
   NOTE_NAMES,
@@ -88,6 +89,12 @@ const syncState = () => [overlayType.value, root.value, scaleId.value, arpeggioI
 // L'indication disparaît dès que la gamme est changée à la main
 const keySyncActive = computed(() => keySync.value && keySync.value.state === syncState())
 
+// ---------- Combo ----------
+const combo = useCombo({
+  scaleKey: computed(() => (pattern.value ? `${overlayType.value}:${root.value}:${pattern.value.id}` : 'none')),
+  scaleSize: computed(() => overlay.value.size),
+})
+
 // ---------- Notes jouées ----------
 const played = shallowRef(null) // { midi, string, fret }
 const anchor = ref(null)
@@ -111,6 +118,7 @@ function registerNote(midi, forcedPosition = null) {
     outside: overlay.value.size > 0 && !info,
   })
   if (history.value.length > 24) history.value.length = 24
+  if (overlay.value.size) combo.play({ midi, ...position, info })
 }
 
 const audio = useAudioInput({
@@ -421,6 +429,8 @@ function toggleAudio() {
         :played="played"
         :alternates="alternates"
         :anchor="anchor"
+        :heat="pattern ? combo.state.value.mult - 1 : 0"
+        :broke-at="combo.brokeAt.value"
         @play="onFretClick"
       />
       <div class="mt-3 flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 text-xs text-neutral-500">
@@ -440,7 +450,18 @@ function toggleAudio() {
         <SpotifyPlayer :suggestion="backingSuggestion" @track-change="onTrackChange" />
         <div class="flex min-h-0 flex-col gap-4">
           <Tuner :midi-float="audio.midiFloat.value" :frequency="audio.frequency.value" :notation="notation" />
-          <NoteHistory :items="history" :notation="notation" @clear="history = []" />
+          <ComboPanel
+            :state="combo.state.value"
+            :announcement="combo.announcement.value"
+            :floater="combo.floater.value"
+            :last-note-at="combo.lastNoteAt.value"
+            :decay-ms="combo.decayMs"
+            :active="Boolean(pattern)"
+            :items="history"
+            :notation="notation"
+            @reset="combo.reset()"
+            @clear="history = []"
+          />
         </div>
       </div>
     </main>

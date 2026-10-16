@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { noteName, pitchClass } from '../lib/music'
 import { DEFAULT_PALETTE, alternateMark, findPalette, playedMark, scaleMark } from '../lib/noteStyles'
 import NoteMark from './NoteMark.vue'
@@ -14,6 +14,8 @@ const props = defineProps({
   alternates: { type: Array, default: () => [] },
   anchor: { type: Object, default: null },
   palette: { type: String, default: DEFAULT_PALETTE }, // voir lib/noteStyles.js
+  heat: { type: Number, default: 0 }, // 0–3 : intensité du halo selon le multiplicateur de combo
+  brokeAt: { type: Number, default: 0 }, // change quand le combo casse -> secousse
 })
 const emit = defineEmits(['play'])
 
@@ -68,6 +70,24 @@ function label(midi, info) {
 
 const colors = computed(() => findPalette(props.palette))
 
+// Halo autour du manche selon le multiplicateur (classes littérales pour Tailwind)
+const GLOW = [
+  'shadow-2xl shadow-black/60',
+  'shadow-[0_0_28px_-6px] shadow-copper-500/40',
+  'shadow-[0_0_40px_-6px] shadow-orange-500/55',
+  'fire-glow',
+]
+const shaking = ref(false)
+let shakeTimer = 0
+watch(
+  () => props.brokeAt,
+  () => {
+    shaking.value = true
+    clearTimeout(shakeTimer)
+    shakeTimer = setTimeout(() => (shaking.value = false), 450)
+  },
+)
+
 const isPlayed = (c) => props.played && props.played.string === c.string && props.played.fret === c.fret
 const isAlternate = (c) => props.alternates.some((a) => a.string === c.string && a.fret === c.fret)
 
@@ -86,7 +106,7 @@ const isWound = (s) => s >= 3
 </script>
 
 <template>
-  <div class="overflow-x-auto rounded-2xl bg-neutral-950 p-4 shadow-2xl shadow-black/60 ring-1 ring-white/5">
+  <div class="overflow-x-auto rounded-2xl bg-neutral-950 p-4 ring-1 ring-white/5 transition-shadow duration-500" :class="[GLOW[heat], { shake: shaking }]">
     <svg :viewBox="`0 0 ${WIDTH} ${height}`" class="w-full min-w-275 select-none" role="img" aria-label="Manche de guitare">
       <defs>
         <!-- Ébène : presque noir, légèrement chaud -->
@@ -228,6 +248,39 @@ const isWound = (s) => s >= 3
 </template>
 
 <style scoped>
+.fire-glow {
+  animation: fire-glow 1.4s ease-in-out infinite;
+}
+@keyframes fire-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 40px -6px rgba(239, 68, 68, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 56px -2px rgba(249, 115, 22, 0.75);
+  }
+}
+.shake {
+  animation: shake 0.45s ease-in-out;
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
 .mark {
   transition: opacity 0.15s;
 }
