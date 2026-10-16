@@ -25,7 +25,7 @@ export function useSpotify() {
   const ready = ref(false) // l'appareil est enregistré auprès de Spotify
   const error = ref('')
 
-  const track = shallowRef(null) // { name, artists, image, uri }
+  const track = shallowRef(null) // { name, artists, album, image, uri }
   const paused = ref(true)
   const position = ref(0) // ms
   const duration = ref(0) // ms
@@ -84,6 +84,7 @@ export function useSpotify() {
         name: t.name,
         uri: t.uri,
         artists: t.artists.map((a) => a.name).join(', '),
+        album: t.album.name,
         image: t.album.images.at(-1)?.url ?? t.album.images[0]?.url,
       }
       paused.value = state.paused

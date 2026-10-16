@@ -8,7 +8,17 @@ const props = defineProps({
   suggestion: { type: String, default: 'guitar backing track' }, // recherche proposée selon la gamme choisie
 })
 
+const emit = defineEmits(['track-change'])
+
 const sp = useSpotify()
+
+// Adapter la gamme du manche au morceau lancé (tonalité lue dans le titre)
+const followKey = ref(localStorage.getItem('fb.spotify.followKey') !== 'false')
+watch(followKey, (v) => localStorage.setItem('fb.spotify.followKey', String(v)))
+watch(
+  () => sp.track.value?.uri,
+  (uri) => uri && followKey.value && emit('track-change', sp.track.value),
+)
 
 const tab = ref('search') // 'search' | 'playlists'
 const query = ref('')
@@ -136,6 +146,11 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
           />
         </div>
       </div>
+
+      <label class="mt-3 flex cursor-pointer items-center gap-2 text-sm text-neutral-400">
+        <input v-model="followKey" type="checkbox" class="size-4 accent-copper-400" />
+        Adapter la gamme au morceau (d'après son titre)
+      </label>
 
       <!-- Recherche / playlists -->
       <div class="mt-4 flex items-center gap-2">

@@ -18,6 +18,7 @@ import {
   pitchClass,
   updateAnchor,
 } from './lib/music'
+import { keyFromTitle } from './lib/keyFromTitle'
 
 // ---------- Réglages persistés ----------
 function persisted(key, initial) {
@@ -55,6 +56,37 @@ const backingSuggestion = computed(() => {
   const minor = pattern.value.intervals.includes(3) && !pattern.value.intervals.includes(4)
   return `${NOTE_NAMES.en[root.value]} ${minor ? 'minor' : 'major'} backing track`
 })
+
+// ---------- Tonalité suivant le morceau Spotify ----------
+const quality = (p) => (p.intervals.includes(3) && !p.intervals.includes(4) ? 'minor' : 'major')
+const keySync = shallowRef(null) // { title, state } : réglage appliqué d'après le morceau
+
+function onTrackChange(track) {
+  // Titre d'abord, puis nom de l'album (souvent « Backing Tracks in A minor »)
+  const key = keyFromTitle(track.name) ?? keyFromTitle(track.album)
+  if (!key) return // rien de fiable : on garde la gamme choisie
+
+  root.value = key.root
+  if (key.scale) {
+    overlayType.value = 'scale'
+    scaleId.value = key.scale
+  } else if (key.quality) {
+    // On garde le type de gamme / d'arpège choisi s'il a déjà la bonne couleur (ex. blues pour un morceau mineur)
+    if (overlayType.value === 'arpeggio') {
+      const current = ARPEGGIOS.find((a) => a.id === arpeggioId.value)
+      if (quality(current) !== key.quality) arpeggioId.value = key.quality === 'minor' ? 'm7' : 'maj7'
+    } else {
+      const current = SCALES.find((sc) => sc.id === scaleId.value)
+      overlayType.value = 'scale'
+      if (quality(current) !== key.quality) scaleId.value = key.quality === 'minor' ? 'penta-minor' : 'penta-major'
+    }
+  }
+  keySync.value = { title: track.name, state: syncState() }
+}
+
+const syncState = () => [overlayType.value, root.value, scaleId.value, arpeggioId.value].join('|')
+// L'indication disparaît dès que la gamme est changée à la main
+const keySyncActive = computed(() => keySync.value && keySync.value.state === syncState())
 
 // ---------- Notes jouées ----------
 const played = shallowRef(null) // { midi, string, fret }
@@ -343,6 +375,10 @@ function toggleAudio() {
             {{ overlayType === 'arpeggio' ? 'Arpège' : overlayType === 'scale' ? 'Gamme' : 'Manche libre' }}
           </div>
           <h2 class="text-3xl font-black tracking-tight text-white">{{ overlayTitle }}</h2>
+          <div v-if="keySyncActive" class="mt-1 flex items-center gap-1.5 text-xs text-neutral-400">
+            <span class="size-2 rounded-full bg-[#1DB954]" />
+            Réglé d'après « <span class="max-w-80 truncate text-neutral-300">{{ keySync.title }}</span> »
+          </div>
           <div v-if="pattern" class="mt-2 flex flex-wrap gap-1.5">
             <span
               v-for="i in pattern.intervals"
@@ -401,7 +437,7 @@ function toggleAudio() {
 
       <!-- Accordeur + historique -->
       <div class="mt-6 grid items-start gap-4 xl:grid-cols-2">
-        <SpotifyPlayer :suggestion="backingSuggestion" />
+        <SpotifyPlayer :suggestion="backingSuggestion" @track-change="onTrackChange" />
         <div class="space-y-4">
           <Tuner :midi-float="audio.midiFloat.value" :frequency="audio.frequency.value" :notation="notation" />
           <NoteHistory :items="history" :notation="notation" @clear="history = []" />
