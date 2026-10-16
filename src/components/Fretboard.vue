@@ -49,28 +49,20 @@ function fretX(f) {
 const noteX = (f) => (f === 0 ? NUT_X - 26 : (fretX(f - 1) + fretX(f)) / 2)
 const stringY = (s) => TOP + s * SPACING
 
-// Tête pointue façon Ibanez, 6 mécaniques en ligne le long d'un bord en biais qui descend du sillet
-// jusqu'à la pointe (en bas à gauche). Chaque mécanique est juste au-dessus de sa propre corde :
-// les cordes restent presque droites et ne se croisent pas.
-const POST_STEP = 22 // écart horizontal entre deux mécaniques
-const POST_RISE = 28 // la mécanique est un peu au-dessus de sa corde
-const EDGE_GAP = 22 // distance entre une mécanique et le bord de la tête
+// Tête longue façon Ibanez, mécaniques en ligne sur le bord inférieur (boutons qui dépassent).
+// Aux vraies proportions, elle sort du cadre à gauche : on ne voit ni sa pointe ni les mécaniques
+// des cordes aiguës. La corde du bas va à la mécanique la plus proche du sillet, celle du haut à la
+// plus lointaine ; la rangée de mécaniques remonte doucement vers la pointe, les cordes ne se croisent pas.
+const POST_STEP = 70 // écart entre deux mécaniques
+const POST_ROW_RISE = 0.35 // pente de la rangée de mécaniques
+const FIRST_POST_X = NUT_X - 64 // à l'écart des notes à vide, posées juste avant le sillet
 function postOf(s) {
-  // La première reste à l'écart des notes à vide, posées juste avant le sillet
-  return { x: NUT_X - 58 - s * POST_STEP, y: stringY(s) - POST_RISE, top: true }
+  const rank = stringCount.value - 1 - s // 0 = corde du bas, mécanique la plus proche du sillet
+  const x = FIRST_POST_X - rank * POST_STEP
+  return { x, y: neckBottom.value + 14 - (FIRST_POST_X - x) * POST_ROW_RISE }
 }
-const HEAD = computed(() => {
-  const nut = NUT_X - 8
-  const top = woodTop - 4
-  const bottom = woodTop + woodHeight.value + 4
-  const first = postOf(0)
-  const last = postOf(stringCount.value - 1)
-  // Bord des mécaniques : droite parallèle à la rangée de mécaniques, un peu au-dessus
-  const slope = (last.y - first.y) / (first.x - last.x)
-  const topEdge = (x) => first.y - EDGE_GAP + (first.x - x) * slope
-  const tip = { x: 0, y: topEdge(0) + 10 } // pointe, légèrement sous le bord
-  return { nut, top, bottom, first, tip, topEdge }
-})
+// Bord inférieur de la tête, juste sous la rangée de mécaniques
+const headBottomAt = (x) => neckBottom.value + 34 - (FIRST_POST_X - x) * POST_ROW_RISE
 function fanY(s, x) {
   const p = postOf(s)
   if (x >= NUT_X) return stringY(s)
@@ -137,21 +129,30 @@ const handZone = computed(() => {
   return { x: x1, w: fretX(to) - x1 }
 })
 
-// Contour : gorge incurvée au sortir du sillet, bord en biais des mécaniques jusqu'à la pointe,
-// puis le dessous presque horizontal qui revient vers le sillet (adouci par un fondu)
+// Contour : en haut, la tête s'élargit en s'éloignant du sillet et sort du cadre ; en bas, une gorge
+// courte puis le bord des mécaniques. Le côté gauche, hors cadre, n'est jamais visible.
 const headPath = computed(() => {
-  const { nut, top, bottom, first, tip, topEdge } = HEAD.value
+  const nut = NUT_X - 8
+  const top = woodTop - 4
+  const bottom = woodTop + woodHeight.value + 4
   return [
     `M ${nut} ${top}`,
-    `C ${nut - 16} ${top} ${first.x + 14} ${topEdge(first.x) - 6} ${first.x} ${topEdge(first.x)}`,
-    `L ${tip.x} ${tip.y}`,
-    `L ${tip.x + 40} ${bottom + 18}`,
-    `C ${nut - 60} ${bottom + 22} ${nut - 20} ${bottom} ${nut} ${bottom}`,
+    `C ${nut - 30} ${top} ${nut - 60} ${top - 30} ${nut - 120} ${top - 46}`,
+    `L -80 ${top - 70}`,
+    `L -80 ${headBottomAt(-80)}`,
+    `L ${FIRST_POST_X} ${headBottomAt(FIRST_POST_X)}`,
+    `C ${FIRST_POST_X + 26} ${headBottomAt(FIRST_POST_X)} ${nut - 18} ${bottom} ${nut} ${bottom}`,
     'Z',
   ].join(' ')
 })
-// Logo sous la dernière corde, le long du bas de la tête
-const logo = computed(() => ({ x: (NUT_X + HEAD.value.tip.x) / 2, y: HEAD.value.bottom + 2, angle: 0 }))
+// Nom de chaque corde : sur sa corde, avant les notes à vide (ou à côté de sa mécanique si elle est plus près)
+function labelPos(s) {
+  const p = postOf(s)
+  const x = NUT_X - 64
+  return x <= p.x ? { x: p.x - 14, y: p.y + 5 } : { x, y: fanY(s, x) - 7 }
+}
+// Logo dans le haut de la tête, au-dessus des cordes, légèrement incliné comme le bord
+const logo = computed(() => ({ x: NUT_X - 100, y: woodTop + 8, angle: -8 }))
 
 // Corps façon Telecaster, vu près de la jonction avec le manche (le corps passe sous la touche) :
 //  - côté aigus (en haut) : un pan coupé profond en U, dont le pavillon repart vers la tête et sort du cadre
@@ -280,6 +281,12 @@ const isWound = (s) => s >= 3
           <stop offset="0.6" stop-color="#c5c9cf" />
           <stop offset="1" stop-color="#6d7178" />
         </linearGradient>
+        <!-- Boutons de mécaniques noirs satinés -->
+        <linearGradient id="knob" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#0a0a0a" />
+          <stop offset="0.4" stop-color="#3a3a3a" />
+          <stop offset="1" stop-color="#0a0a0a" />
+        </linearGradient>
         <!-- Axes des mécaniques chromés -->
         <radialGradient id="post" cx="0.35" cy="0.3" r="0.8">
           <stop offset="0" stop-color="#ffffff" />
@@ -308,6 +315,11 @@ const isWound = (s) => s >= 3
           :stroke="isWound(s) ? '#c9a571' : '#d4d8dd'"
           :stroke-width="stringWidth(s)"
         />
+        <!-- Boutons des mécaniques qui dépassent sous la tête -->
+        <g v-for="(open, s) in tuning" :key="'k' + s">
+          <rect :x="postOf(s).x - 3" :y="headBottomAt(postOf(s).x) - 4" width="6" height="8" fill="url(#post)" />
+          <rect :x="postOf(s).x - 10" :y="headBottomAt(postOf(s).x) + 3" width="20" height="22" rx="7" fill="url(#knob)" />
+        </g>
         <!-- Axes chromés -->
         <g v-for="(open, s) in tuning" :key="'p' + s" filter="url(#shadow)">
           <circle :cx="postOf(s).x" :cy="postOf(s).y" r="9" fill="#0d0b09" stroke="#3a332d" stroke-width="1.5" />
@@ -390,12 +402,12 @@ const isWound = (s) => s >= 3
         />
       </g>
 
-      <!-- Nom des cordes, à côté de leur mécanique (hors fondu pour rester lisible) -->
+      <!-- Nom des cordes (hors fondu pour rester lisible) -->
       <text
         v-for="(open, s) in tuning"
         :key="'o' + s"
-        :x="postOf(s).x - 13"
-        :y="postOf(s).y + 5"
+        :x="labelPos(s).x"
+        :y="labelPos(s).y"
         text-anchor="end"
         class="fill-neutral-300 text-[13px] font-bold"
         paint-order="stroke"
