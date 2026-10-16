@@ -160,7 +160,7 @@ function registerNote(midi, forcedPosition = null, legato = false) {
   const position = note.position
 
   const info = overlay.value.get(pitchClass(midi)) ?? null
-  const events = overlay.value.size ? combo.play({ midi, ...position, info, legato }) : []
+  const events = overlay.value.size ? combo.play({ midi, ...position, info, legato, interval: (pitchClass(midi) - root.value + 12) % 12 }) : []
   const glide = events.some((e) => e.type === 'glide') // note de passage d'un slide : pas une erreur
 
   history.value.unshift({

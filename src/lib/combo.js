@@ -9,6 +9,8 @@
  *  - bonus d'exploration (nouvelle position sur le manche), de gamme complète et de résolution
  *    (phrase terminée sur la tonique suivie d'un silence)
  *  - le combo se perd après quelques secondes sans jouer
+ *  - fin de phrase (silence après au moins 3 notes) : événement avec le degré de la dernière note,
+ *    pour annoncer la sensation qu'elle produit (voir lib/feelings.js)
  *  - slides / bends / legato : une note hors gamme jouée sans attaque, à 1–2 demi-tons de la précédente,
  *    est une note de passage — ni erreur, ni comptée dans la précision
  */
@@ -19,6 +21,7 @@ export const DECAY_MS = 5000 // silence avant la perte du combo
 export const PHRASE_GAP_MS = 1200 // silence qui marque la fin d'une phrase
 export const MAX_REPEATS = 2
 export const ALLOWED_MISSES = 1 // fausses notes d'affilée tolérées
+export const MIN_PHRASE_NOTES = 3 // notes minimum pour annoncer la sensation de fin de phrase
 export const GLIDE_SEMITONES = 2 // écart maximal d'une note de passage avec la note précédente
 
 const POINTS = { note: 10, explore: 5, fullScale: 100, resolution: 50 }
@@ -47,6 +50,8 @@ export function createRun() {
     lastAt: 0,
     lastWasRoot: false,
     phraseLength: 0,
+    phraseNotes: 0, // notes de la phrase en cours, même hors gamme
+    lastInterval: null, // degré (0–11 depuis la tonique) de la dernière note
     positions: new Set(), // positions déjà jouées (exploration)
     degrees: new Set(), // degrés joués pendant le combo en cours
     fullScale: false,
@@ -65,11 +70,12 @@ function breakCombo(run, reason) {
 
 /**
  * Une note jouée.
- * note : { midi, string, fret, info, legato } — info = degré dans la gamme, ou null si hors gamme ;
- *        legato = la note est arrivée sans nouvelle attaque (slide, bend, hammer-on…)
+ * note : { midi, string, fret, info, legato, interval } — info = degré dans la gamme, ou null si hors gamme ;
+ *        legato = la note est arrivée sans nouvelle attaque (slide, bend, hammer-on…) ;
+ *        interval = écart avec la tonique (0–11), même hors gamme
  * scaleSize : nombre de notes de la gamme (pour « gamme complète »)
  */
-export function playNote(run, { midi, string, fret, info, legato = false }, scaleSize, now) {
+export function playNote(run, { midi, string, fret, info, legato = false, interval = null }, scaleSize, now) {
   const prevMidi = run.prevMidi
   run.prevMidi = midi
   run.lastAt = now
@@ -77,6 +83,8 @@ export function playNote(run, { midi, string, fret, info, legato = false }, scal
   if (!info && legato && prevMidi !== null && Math.abs(midi - prevMidi) <= GLIDE_SEMITONES) return [{ type: 'glide' }]
 
   run.notes++
+  run.phraseNotes++
+  run.lastInterval = interval ?? info?.interval ?? null
 
   if (!info) {
     run.misses++
@@ -123,7 +131,7 @@ export function playNote(run, { midi, string, fret, info, legato = false }, scal
   return events
 }
 
-/** À appeler régulièrement : fin de phrase (bonus de résolution) et perte du combo après un silence. */
+/** À appeler régulièrement : fin de phrase (bonus de résolution, sensation) et perte du combo après un silence. */
 export function checkSilence(run, now) {
   if (!run.lastAt) return []
   const gap = now - run.lastAt
@@ -138,6 +146,11 @@ export function checkSilence(run, now) {
     }
     run.phraseLength = 0
     run.lastWasRoot = false
+  }
+  if (gap >= PHRASE_GAP_MS && run.phraseNotes > 0) {
+    if (run.phraseNotes >= MIN_PHRASE_NOTES && run.lastInterval !== null) events.push({ type: 'phrase-end', interval: run.lastInterval })
+    run.phraseNotes = 0
+    run.lastInterval = null
   }
 
   if (run.combo > 0 && gap >= DECAY_MS) events.push(...breakCombo(run, 'timeout'))

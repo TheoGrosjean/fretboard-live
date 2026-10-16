@@ -1,4 +1,5 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { feelingFor } from '../lib/feelings'
 import { DECAY_MS, checkSilence, createRun, multiplierFor, playNote, tierProgress } from '../lib/combo'
 
 const RECORDS_KEY = 'fb.records'
@@ -22,7 +23,7 @@ export function useCombo({ scaleKey, scaleSize }) {
   const touch = () => version.value++
 
   const records = ref(loadRecords())
-  const announcement = shallowRef(null) // { id, text, tone }
+  const announcement = shallowRef(null) // { id, text, tone, sub?, effect? }
   const floater = shallowRef(null) // { id, text } : points gagnés
   const lastNoteAt = ref(0) // pour l'animation de la jauge de temps
   const brokeAt = ref(0) // pour la secousse du manche
@@ -45,10 +46,10 @@ export function useCombo({ scaleKey, scaleSize }) {
     }
   })
 
-  function announce(text, tone = 'copper') {
+  function announce(text, tone = 'copper', { sub = '', effect = '', duration = 1600 } = {}) {
     clearTimeout(announceTimer)
-    announcement.value = { id: ++eventId, text, tone }
-    announceTimer = setTimeout(() => (announcement.value = null), 1600)
+    announcement.value = { id: ++eventId, text, tone, sub, effect }
+    announceTimer = setTimeout(() => (announcement.value = null), duration)
   }
 
   function saveRecord() {
@@ -62,9 +63,11 @@ export function useCombo({ scaleKey, scaleSize }) {
   function handle(events) {
     for (const e of events) {
       if (e.type === 'hit') floater.value = { id: ++eventId, text: `+${e.points}` }
-      else if (e.type === 'resolution') {
-        floater.value = { id: ++eventId, text: `+${e.points}` }
-        announce('Résolution !')
+      else if (e.type === 'resolution') floater.value = { id: ++eventId, text: `+${e.points}` }
+      else if (e.type === 'phrase-end') {
+        // Sensation de la note finale, avec son propre effet de texte
+        const f = feelingFor(e.interval)
+        announce(f.word, 'feeling', { sub: `Fin sur la ${f.degree} · ${f.sub}`, effect: f.effect, duration: 2600 })
       } else if (e.type === 'full-scale') announce('Gamme complète !')
       else if (e.type === 'tier') announce(e.mult === 4 ? '×4 EN FEU !' : `×${e.mult} !`, e.mult === 4 ? 'fire' : 'copper')
       else if (e.type === 'milestone') announce(`${e.combo} COMBO !`)
