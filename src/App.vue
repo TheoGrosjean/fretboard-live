@@ -544,7 +544,6 @@ function toggleAudio() {
       <div class="mt-4 grid min-h-0 flex-1 gap-4 overflow-y-auto xl:grid-cols-2 xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
         <SpotifyPlayer :suggestion="backingSuggestion" @track-change="onTrackChange" />
         <div class="flex min-h-0 flex-col gap-4">
-          <Tuner :midi-float="audio.midiFloat.value" :frequency="audio.frequency.value" :notation="notation" />
           <ComboPanel
             :state="combo.state.value"
             :floater="combo.floater.value"
@@ -556,6 +555,7 @@ function toggleAudio() {
             @reset="combo.reset()"
             @clear="history = []"
           />
+          <Tuner :midi-float="audio.midiFloat.value" :frequency="audio.frequency.value" :notation="notation" />
         </div>
       </div>
     </main>
