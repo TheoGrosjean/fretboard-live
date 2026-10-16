@@ -52,7 +52,7 @@ const stringY = (s) => TOP + s * SPACING
 // Tête façon Ibanez : les cordes continuent parallèles au manche jusqu'à leur mécanique. La corde du bas
 // s'arrête le plus près du sillet, celle du haut le plus loin : les mécaniques forment une diagonale,
 // avec leur bouton juste dessous, le long du bord inférieur de la tête. Le reste sort du cadre à gauche.
-const POST_STEP = 24 // écart entre deux mécaniques
+const POST_STEP = 40 // écart entre deux mécaniques (les dernières et le bout de la tête sortent du cadre)
 const FIRST_POST_X = NUT_X - 64 // à l'écart des notes à vide, posées juste avant le sillet
 function postOf(s) {
   const rank = stringCount.value - 1 - s // 0 = corde du bas, mécanique la plus proche du sillet
@@ -138,8 +138,8 @@ const headPath = computed(() => {
   return [
     `M ${nut} ${top}`,
     `C ${nut - 26} ${top} ${nut - 40} ${top - 24} ${nut - 70} ${top - 32}`,
-    `L -80 ${top - 48}`,
-    `L -80 ${edge(-80)}`,
+    `L -260 ${top - 70}`,
+    `L -260 ${edge(-260)}`,
     `L ${low.x + 10} ${edge(low.x + 10)}`,
     `C ${low.x + 30} ${bottom + 10} ${nut - 22} ${bottom} ${nut} ${bottom}`,
     'Z',
@@ -325,6 +325,22 @@ const isWound = (s) => s >= 3
           <circle :cx="postOf(s).x" :cy="postOf(s).y" r="1.8" fill="#2a2a2a" />
         </g>
       </g>
+
+      <!-- Nom des cordes dont la mécanique est hors champ : au bord gauche, sur la corde -->
+      <template v-for="(open, s) in tuning" :key="'edge-name' + s">
+        <text
+          v-if="postOf(s).x < 16"
+          x="8"
+          :y="stringY(s) - 7"
+          class="fill-neutral-300 font-bold"
+          font-size="11"
+          paint-order="stroke"
+          stroke="#0d0b09"
+          stroke-width="3"
+        >
+          {{ noteName(open, notation) }}
+        </text>
+      </template>
 
       <!-- Corps de la guitare façon Telecaster (s'efface vers la droite, le haut et le bas) -->
       <g mask="url(#body-fade)">
