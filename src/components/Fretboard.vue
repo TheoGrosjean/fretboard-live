@@ -135,8 +135,6 @@ const headPath = computed(() => {
     'Z',
   ].join(' ')
 })
-const headTop = woodTop - 32 // bord de la tête, au niveau des mécaniques
-const headBottom = computed(() => woodTop + woodHeight.value + 32)
 
 const stringWidth = (s) => 1.2 + (s / Math.max(1, stringCount.value - 1)) * 2.6
 const isWound = (s) => s >= 3
@@ -209,12 +207,6 @@ const isWound = (s) => s >= 3
         <mask id="head-fade" maskUnits="userSpaceOnUse" x="0" y="0" :width="NUT_X" :height="height">
           <rect x="0" y="0" :width="NUT_X" :height="height" fill="url(#head-fade-grad)" />
         </mask>
-        <!-- Boutons de mécaniques noirs satinés -->
-        <linearGradient id="knob" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stop-color="#0a0a0a" />
-          <stop offset="0.4" stop-color="#3a3a3a" />
-          <stop offset="1" stop-color="#0a0a0a" />
-        </linearGradient>
         <!-- Axes des mécaniques chromés -->
         <radialGradient id="post" cx="0.35" cy="0.3" r="0.8">
           <stop offset="0" stop-color="#ffffff" />
@@ -239,17 +231,6 @@ const isWound = (s) => s >= 3
           Fretboard
         </text>
         <text :x="NUT_X - 100" :y="(TOP + neckBottom) / 2 + 24" text-anchor="middle" class="fill-copper-400/70 font-bold tracking-[0.35em]" font-size="9">LIVE</text>
-        <!-- Boutons de mécaniques qui dépassent du bord (en partie hors cadre) -->
-        <rect
-          v-for="(open, s) in tuning"
-          :key="'k' + s"
-          :x="postOf(s).x - 11"
-          :y="postOf(s).top ? headTop - 16 : headBottom - 2"
-          width="22"
-          height="18"
-          rx="6"
-          fill="url(#knob)"
-        />
         <!-- Cordes en éventail du sillet aux mécaniques -->
         <line
           v-for="(open, s) in tuning"
