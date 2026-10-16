@@ -45,21 +45,21 @@ const TONES = {
       <!-- Compteur, multiplicateur, score -->
       <div class="flex items-end gap-4">
         <div class="leading-none">
-          <div class="text-5xl font-black tabular-nums transition-colors" :class="state.combo ? 'text-white' : 'text-neutral-700'">{{ state.combo }}</div>
+          <div class="text-7xl font-black tabular-nums transition-colors" :class="state.combo ? 'text-white' : 'text-neutral-700'">{{ state.combo }}</div>
           <div class="mt-1 text-[11px] tracking-widest text-neutral-500 uppercase">combo</div>
         </div>
-        <div class="mb-5 rounded-lg px-2.5 py-1 text-lg font-black transition-colors" :class="tier.badge">×{{ state.mult }}</div>
+        <div class="mb-6 rounded-xl px-3 py-1.5 text-2xl font-black transition-colors" :class="tier.badge">×{{ state.mult }}</div>
         <div v-if="state.misses" class="mb-6 rounded-full bg-amber-400/10 px-2 py-0.5 text-[11px] text-amber-300">1 erreur tolérée</div>
 
         <div class="relative ml-auto text-right">
-          <div class="text-2xl font-black text-white tabular-nums">{{ state.score.toLocaleString('fr-FR') }}</div>
+          <div class="text-4xl font-black text-white tabular-nums">{{ state.score.toLocaleString('fr-FR') }}</div>
           <div class="text-[11px] text-neutral-500 tabular-nums">record {{ state.record.score.toLocaleString('fr-FR') }}</div>
           <span v-if="floater" :key="floater.id" class="floater absolute -top-4 right-0 text-sm font-bold text-copper-300">{{ floater.text }}</span>
         </div>
       </div>
 
       <!-- Barre de combo vers le palier suivant + jauge de temps -->
-      <div class="mt-3 h-3 overflow-hidden rounded-full bg-neutral-800">
+      <div class="mt-4 h-4 overflow-hidden rounded-full bg-neutral-800">
         <div class="h-full rounded-full transition-[width] duration-200" :class="tier.bar" :style="{ width: Math.max(state.progress, state.combo ? 0.03 : 0) * 100 + '%' }" />
       </div>
       <div class="mt-1 h-0.5 overflow-hidden rounded-full">
@@ -103,7 +103,7 @@ const TONES = {
     <p v-else-if="active" class="mt-3 text-sm text-neutral-600">Joue des notes de la gamme pour faire monter le combo.</p>
 
     <!-- Annonces -->
-    <div v-if="announcement" :key="announcement.id" class="announce pointer-events-none absolute inset-x-0 top-1/3 text-center text-3xl font-black tracking-tight" :class="TONES[announcement.tone]">
+    <div v-if="announcement" :key="announcement.id" class="announce pointer-events-none absolute inset-x-0 top-1/3 text-center text-4xl font-black tracking-tight" :class="TONES[announcement.tone]">
       {{ announcement.text }}
     </div>
   </section>
