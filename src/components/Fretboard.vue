@@ -52,8 +52,8 @@ const stringY = (s) => TOP + s * SPACING
 // Tête façon Ibanez : les cordes continuent parallèles au manche jusqu'à leur mécanique. La corde du bas
 // s'arrête le plus près du sillet, celle du haut le plus loin : les mécaniques forment une diagonale,
 // avec leur bouton juste dessous, le long du bord inférieur de la tête. Le reste sort du cadre à gauche.
-const POST_STEP = 160 // écart entre deux mécaniques
-const FIRST_POST_X = -30 // toutes les mécaniques sont hors champ, à gauche du cadre
+const POST_STEP = 50 // écart entre deux mécaniques : le bord du bas remonte nettement vers la gauche
+const FIRST_POST_X = NUT_X - 70 // à l'écart des notes à vide ; les mécaniques des cordes aiguës sortent du cadre
 function postOf(s) {
   const rank = stringCount.value - 1 - s // 0 = corde du bas, mécanique la plus proche du sillet
   return { x: FIRST_POST_X - rank * POST_STEP, y: stringY(s) }
@@ -125,8 +125,8 @@ const handZone = computed(() => {
   return { x: x1, w: fretX(to) - x1 }
 })
 
-// Contour : la fin du manche s'évase en arrondi des deux côtés, puis la tête sort du cadre à gauche
-// (en bas, le bord rejoint la rangée de mécaniques, hors champ)
+// Contour : la fin du manche s'évase en arrondi des deux côtés ; en haut la tête sort du cadre,
+// en bas le bord remonte en diagonale le long des mécaniques des cordes graves
 const headPath = computed(() => {
   const nut = NUT_X - 8
   const top = woodTop - 4
@@ -140,8 +140,8 @@ const headPath = computed(() => {
     `C ${nut - 26} ${top} ${nut - 40} ${top - 24} ${nut - 70} ${top - 32}`,
     `L -260 ${top - 70}`,
     `L -260 ${edge(-260)}`,
-    `L ${nut - 70} ${bottom + 14}`,
-    `C ${nut - 40} ${bottom + 12} ${nut - 26} ${bottom} ${nut} ${bottom}`,
+    `L ${low.x + 8} ${edge(low.x + 8)}`,
+    `C ${low.x + 30} ${bottom + 12} ${nut - 24} ${bottom} ${nut} ${bottom}`,
     'Z',
   ].join(' ')
 })
