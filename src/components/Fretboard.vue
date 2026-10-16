@@ -30,9 +30,9 @@ const END_X = WIDTH - BODY_W - 20 - TAIL // dernière frette
 const NECK_END = END_X + TAIL // extrémité de la touche, côté corps
 const MARGIN_Y = 64 // place au-dessus et en dessous du manche (tête évasée, corps)
 const TOP = 26 + MARGIN_Y
-const SPACING = 54
+const SPACING = 48
 const NOTE_SIZE = 40 // largeur des notes
-const EDGE = 26 // débord du bois au-delà des cordes extrêmes
+const EDGE = 23 // débord du bois au-delà des cordes extrêmes
 
 const stringCount = computed(() => props.tuning.length)
 const neckBottom = computed(() => TOP + (stringCount.value - 1) * SPACING)
