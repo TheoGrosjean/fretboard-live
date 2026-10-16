@@ -14,7 +14,7 @@ const labelMode = ref('note')
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#0b0d12] px-6 py-8 text-neutral-200">
+  <div class="min-h-screen bg-anthracite px-6 py-8 text-neutral-200">
     <header class="mx-auto mb-8 flex max-w-[1500px] flex-wrap items-end justify-between gap-4">
       <div>
         <h1 class="text-2xl font-black text-white">Choisis ta palette</h1>

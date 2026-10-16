@@ -124,7 +124,7 @@ function toggleAudio() {
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-[#0b0d12] text-neutral-200">
+  <div class="flex min-h-screen bg-anthracite text-neutral-200">
     <!-- ========== Barre latérale ========== -->
     <aside
       class="sticky top-0 flex h-screen shrink-0 flex-col border-r border-white/5 bg-neutral-900/70 backdrop-blur transition-[width] duration-200"

@@ -6,9 +6,11 @@
   --color-copper-400: #f0956a;
   --color-copper-500: #e2683a;
   --color-copper-600: #c2522a;
+  /* Fond de page anthracite, sans dominante bleue */
+  --color-anthracite: #1e1e1e;
 }
 
 html,
 body {
-  background-color: #0b0d12;
+  background-color: #1e1e1e;
 }
