@@ -3,7 +3,6 @@
 // les cordes se tendent, puis la box 1 de La pentatonique mineure s'allume en arpège ; on « entre » dans le manche.
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
-const props = defineProps({ freezeAt: { type: Number, default: null } }) // ms : fige l'animation (aperçus)
 const emit = defineEmits(['done'])
 
 const FRETS = 12
@@ -38,7 +37,6 @@ const INLAYS = [3, 5, 7, 9]
 const leaving = ref(false)
 let timers = []
 onMounted(() => {
-  if (props.freezeAt !== null) return
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
   timers = [setTimeout(() => (leaving.value = true), reduced ? 600 : 2350), setTimeout(() => emit('done'), reduced ? 1000 : 2850)]
 })

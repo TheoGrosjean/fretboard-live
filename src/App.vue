@@ -5,6 +5,7 @@ import Tuner from './components/Tuner.vue'
 import ComboPanel from './components/ComboPanel.vue'
 import Icon from './components/Icon.vue'
 import SpotifyPlayer from './components/SpotifyPlayer.vue'
+import LoaderNeck from './components/loaders/LoaderNeck.vue'
 import { useAudioInput } from './composables/useAudioInput'
 import { useCombo } from './composables/useCombo'
 import {
@@ -30,6 +31,7 @@ function persisted(key, initial) {
 }
 
 const sidebarOpen = persisted('sidebarOpen', true)
+const splash = ref(true) // animation de chargement au lancement
 const overlayType = persisted('overlayType', 'scale') // 'scale' | 'arpeggio' | 'none'
 const root = persisted('root', 9) // La
 const scaleId = persisted('scaleId', 'penta-minor')
@@ -217,6 +219,11 @@ function toggleAudio() {
 </script>
 
 <template>
+  <!-- Animation de chargement : le manche se dessine, puis on plonge dans l'app -->
+  <div v-if="splash" class="fixed inset-0 z-50">
+    <LoaderNeck @done="splash = false" />
+  </div>
+
   <div class="flex h-screen overflow-hidden bg-anthracite text-neutral-200">
     <!-- ========== Barre latérale ========== -->
     <aside
