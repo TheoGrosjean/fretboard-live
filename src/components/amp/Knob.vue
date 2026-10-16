@@ -101,7 +101,7 @@ function onKey(e) {
         <line x1="50" y1="16" x2="50" y2="31" stroke="#f5f5f4" stroke-width="4" stroke-linecap="round" />
       </g>
     </svg>
-    <div class="label -mt-1 text-[11px] font-black tracking-[0.22em] uppercase">{{ label }}</div>
+    <div class="label -mt-1 text-[10px] font-black tracking-[0.1em] uppercase sm:text-[11px] sm:tracking-[0.22em]">{{ label }}</div>
   </div>
 </template>
 

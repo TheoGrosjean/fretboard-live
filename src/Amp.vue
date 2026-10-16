@@ -232,12 +232,12 @@ onBeforeUnmount(stop)
                 <span class="silk-label">Input</span>
               </div>
 
-              <div class="grid flex-1 grid-cols-3 gap-x-1 gap-y-3 sm:grid-cols-5 lg:grid-cols-9">
+              <div class="grid w-full grid-cols-3 gap-x-1 gap-y-3 sm:grid-cols-5 lg:w-auto lg:flex-1 lg:grid-cols-9">
                 <Knob v-for="k in KNOBS" :key="k.id" v-model="params[k.id]" :label="k.label" :default-value="PRESETS[DEFAULT_PRESET][k.id]" :size="74" />
               </div>
 
               <!-- Power + voyant -->
-              <button class="flex items-center gap-3 lg:flex-col lg:gap-2" :title="running ? 'Éteindre' : 'Allumer'" @click="toggle">
+              <button class="mx-auto flex items-center gap-3 lg:mx-0 lg:flex-col lg:gap-2" :title="running ? 'Éteindre' : 'Allumer'" @click="toggle">
                 <span class="jewel" />
                 <span class="toggle"><span /></span>
                 <span class="silk-label">Power</span>
@@ -253,7 +253,7 @@ onBeforeUnmount(stop)
         <section class="board">
           <div class="mb-4 flex items-baseline justify-between">
             <h2 class="text-xs font-semibold tracking-widest text-neutral-500 uppercase">Pédalier</h2>
-            <span class="text-[11px] text-neutral-600">clique une pédale pour charger le preset</span>
+            <span class="hidden text-[11px] text-neutral-600 sm:inline">clique une pédale pour charger le preset</span>
           </div>
           <div class="grid grid-cols-3 gap-3 sm:gap-4">
             <button
