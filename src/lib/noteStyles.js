@@ -49,3 +49,17 @@ export function alternateMark(palette, { outside }) {
   const color = outside ? palette.outside : palette.alternate
   return { shape: 'circle', size: SIZE, fill: '#1c1917', fillOpacity: 0.85, stroke: color, strokeWidth: 2, dashed: true, textColor: color }
 }
+
+/** Finitions unies du corps de la guitare. */
+export const BODY_FINISHES = [
+  { id: 'black', name: 'Noir satiné', color: '#1c1c1e' },
+  { id: 'cream', name: 'Crème vintage', color: '#e6dcc6' },
+  { id: 'copper', name: 'Cuivre métallisé', color: '#a8552f' },
+  { id: 'burgundy', name: 'Bordeaux', color: '#5e1a26' },
+  { id: 'navy', name: 'Bleu nuit', color: '#1b2a44' },
+  { id: 'sonic', name: 'Sonic Blue', color: '#8fb1c4' },
+]
+
+export const DEFAULT_BODY_FINISH = 'black'
+
+export const findBodyFinish = (id) => BODY_FINISHES.find((f) => f.id === id) ?? BODY_FINISHES[0]

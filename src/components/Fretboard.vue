@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { noteName, pitchClass } from '../lib/music'
-import { DEFAULT_PALETTE, alternateMark, findPalette, playedMark, scaleMark } from '../lib/noteStyles'
+import { DEFAULT_BODY_FINISH, DEFAULT_PALETTE, alternateMark, findBodyFinish, findPalette, playedMark, scaleMark } from '../lib/noteStyles'
 import NoteMark from './NoteMark.vue'
 
 const props = defineProps({
@@ -14,6 +14,7 @@ const props = defineProps({
   alternates: { type: Array, default: () => [] },
   anchor: { type: Object, default: null },
   palette: { type: String, default: DEFAULT_PALETTE }, // voir lib/noteStyles.js
+  bodyFinish: { type: String, default: DEFAULT_BODY_FINISH }, // couleur unie du corps
   heat: { type: Number, default: 0 }, // 0–3 : intensité du halo selon le multiplicateur de combo
   brokeAt: { type: Number, default: 0 }, // change quand le combo casse -> secousse
 })
@@ -91,6 +92,7 @@ function label(midi, info) {
 }
 
 const colors = computed(() => findPalette(props.palette))
+const bodyColor = computed(() => findBodyFinish(props.bodyFinish).color)
 
 // Halo autour du manche selon le multiplicateur (classes littérales pour Tailwind)
 const GLOW = [
@@ -251,6 +253,13 @@ const isWound = (s) => s >= 3
         <mask id="head-fade" maskUnits="userSpaceOnUse" x="0" y="0" :width="NUT_X" :height="height">
           <rect x="0" y="0" :width="NUT_X" :height="height" fill="url(#head-fade-grad)" />
         </mask>
+        <!-- Reflet verni sur le corps (s'applique à toutes les couleurs) -->
+        <linearGradient id="body-sheen" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fff" stop-opacity="0.16" />
+          <stop offset="0.3" stop-color="#fff" stop-opacity="0.03" />
+          <stop offset="0.7" stop-color="#000" stop-opacity="0.05" />
+          <stop offset="1" stop-color="#000" stop-opacity="0.3" />
+        </linearGradient>
         <!-- Capot de micro chromé -->
         <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stop-color="#7d8188" />
@@ -304,9 +313,10 @@ const isWound = (s) => s >= 3
       <!-- Corps de la guitare façon Telecaster (s'efface vers la droite, le haut et le bas) -->
       <g mask="url(#body-fade)">
         <g mask="url(#body-fade-v)">
-          <path :d="bodyGeometry.fill" fill="url(#head)" />
-          <path :d="bodyGeometry.fill" fill="#fff" filter="url(#grain)" opacity="0.6" />
-          <path v-for="(d, i) in bodyGeometry.edges" :key="'edge' + i" :d="d" fill="none" stroke="#5a5048" stroke-width="2" />
+          <!-- Laque unie + reflet verni -->
+          <path :d="bodyGeometry.fill" :fill="bodyColor" />
+          <path :d="bodyGeometry.fill" fill="url(#body-sheen)" />
+          <path v-for="(d, i) in bodyGeometry.edges" :key="'edge' + i" :d="d" fill="none" stroke="#fff" stroke-opacity="0.28" stroke-width="2" />
         </g>
         <!-- Plaque du micro, en pointe vers le chevalet -->
         <path
@@ -397,7 +407,11 @@ const isWound = (s) => s >= 3
         :y="neckBottom + EDGE + 28"
         text-anchor="middle"
         class="text-[14px] tabular-nums"
-        :class="inlays.some((m) => m.fret === f) ? 'fill-neutral-200 font-bold' : 'fill-neutral-600'"
+        :class="inlays.some((m) => m.fret === f) ? 'fill-neutral-200 font-bold' : 'fill-neutral-500'"
+        paint-order="stroke"
+        stroke="#0d0b09"
+        stroke-width="4"
+        stroke-linejoin="round"
       >
         {{ f }}
       </text>
