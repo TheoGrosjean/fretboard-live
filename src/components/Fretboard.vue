@@ -52,7 +52,7 @@ const stringY = (s) => TOP + s * SPACING
 // Tête façon Ibanez : les cordes continuent parallèles au manche jusqu'à leur mécanique. La corde du bas
 // s'arrête le plus près du sillet, celle du haut le plus loin : les mécaniques forment une diagonale,
 // avec leur bouton juste dessous, le long du bord inférieur de la tête. Le reste sort du cadre à gauche.
-const POST_STEP = 50 // écart entre deux mécaniques : le bord du bas remonte nettement vers la gauche
+const POST_STEP = 100 // écart entre deux mécaniques : règle la pente du bord du bas de la tête
 const FIRST_POST_X = NUT_X - 70 // à l'écart des notes à vide ; les mécaniques des cordes aiguës sortent du cadre
 function postOf(s) {
   const rank = stringCount.value - 1 - s // 0 = corde du bas, mécanique la plus proche du sillet
