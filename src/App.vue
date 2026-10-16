@@ -318,6 +318,14 @@ function toggleAudio() {
         <h1 v-if="sidebarOpen || drawer" class="text-lg font-black tracking-tight whitespace-nowrap text-white">
           Fretboard <span class="text-copper-400">Live</span>
         </h1>
+        <a
+          v-if="sidebarOpen || drawer"
+          href="#ampli"
+          class="ml-auto mr-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-neutral-400 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-neutral-100"
+          title="Simulateur d'ampli (en test)"
+        >
+          Ampli
+        </a>
         <button
           class="rounded-lg p-2 text-neutral-500 transition hover:bg-white/5 hover:text-neutral-200"
           :title="sidebarOpen ? 'Replier les réglages' : 'Déplier les réglages'"
@@ -348,6 +356,7 @@ function toggleAudio() {
         </button>
         <button class="rail-btn" title="Entrée audio" @click="sidebarOpen = true"><Icon name="mic" class="size-5" /></button>
         <button class="rail-btn" title="Affichage" @click="sidebarOpen = true"><Icon name="sliders" class="size-5" /></button>
+        <a class="rail-btn" href="#ampli" title="Simulateur d'ampli (en test)"><Icon name="volume" class="size-5" /></a>
       </nav>
 
       <!-- Barre dépliée : réglages -->
