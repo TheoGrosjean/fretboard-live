@@ -22,7 +22,9 @@ const emit = defineEmits(['play'])
 const BODY_W = 140 // partie visible du corps, à droite de la dernière case
 const WIDTH = 1560 + BODY_W
 const NUT_X = 200 // laisse la place à la tête de la guitare, à gauche du sillet
-const END_X = WIDTH - BODY_W - 20 // fin de la touche (dernière case)
+const TAIL = 38 // bout de touche sans frette après la dernière case, avant le micro
+const END_X = WIDTH - BODY_W - 20 - TAIL // dernière frette
+const NECK_END = END_X + TAIL // extrémité de la touche, côté corps
 const MARGIN_Y = 64 // place au-dessus et en dessous du manche (tête évasée, corps)
 const TOP = 26 + MARGIN_Y
 const SPACING = 54
@@ -142,11 +144,11 @@ const headPath = computed(() => {
 //  - côté aigus (en haut) : un pan coupé profond en U, dont le pavillon repart vers la tête et sort du cadre
 //  - côté graves (en bas) : une épaule arrondie qui rejoint le manche avec une petite encoche
 // Le contour sort du cadre ; il s'efface en fondu vers la droite, le haut et le bas.
-const BODY_START = END_X - 500 // bord gauche de la zone du corps (épaule côté graves)
+const BODY_START = NECK_END - 500 // bord gauche de la zone du corps (épaule côté graves)
 // Proportions d'une Telecaster rapportées à la largeur du manche : l'épaule rejoint le manche
 // vers la 16e case, le pan coupé démarre vers la 20e ; le reste sort du cadre
 const bodyGeometry = computed(() => {
-  const E = END_X
+  const E = NECK_END
   const T = woodTop - 4
   const B = woodTop + woodHeight.value + 4
   const cutaway = `M ${E - 177} ${T} C ${E - 120} ${T - 8} ${E - 70} ${T - 110} ${E - 62} ${T - 198} C ${E - 55} ${T - 260} ${E - 200} ${T - 400} ${E - 385} ${T - 489}`
@@ -159,7 +161,7 @@ const bodyGeometry = computed(() => {
   return { fill, edges: [cutaway, shoulder] }
 })
 // Micro manche capoté chromé, sur une plaque terminée en pointe vers le chevalet
-const PICKUP = { x: END_X + 34, w: 26 }
+const PICKUP = { x: NECK_END + 34, w: 26 }
 
 const stringWidth = (s) => 1.2 + (s / Math.max(1, stringCount.value - 1)) * 2.6
 const isWound = (s) => s >= 3
@@ -319,7 +321,7 @@ const isWound = (s) => s >= 3
         <line
           v-for="(open, s) in tuning"
           :key="'b' + s"
-          :x1="END_X"
+          :x1="NECK_END"
           :x2="WIDTH"
           :y1="stringY(s)"
           :y2="stringY(s)"
@@ -329,11 +331,11 @@ const isWound = (s) => s >= 3
       </g>
 
       <!-- Touche en ébène -->
-      <rect :x="NUT_X" :y="woodTop" :width="END_X - NUT_X" :height="woodHeight" fill="url(#ebony)" />
-      <rect :x="NUT_X" :y="woodTop" :width="END_X - NUT_X" :height="woodHeight" fill="#fff" filter="url(#grain)" />
+      <rect :x="NUT_X" :y="woodTop" :width="NECK_END - NUT_X" :height="woodHeight" fill="url(#ebony)" />
+      <rect :x="NUT_X" :y="woodTop" :width="NECK_END - NUT_X" :height="woodHeight" fill="#fff" filter="url(#grain)" />
       <!-- Filets (binding) crème sur les bords -->
-      <rect :x="NUT_X" :y="woodTop - 4" :width="END_X - NUT_X" height="4" fill="#e9e1cc" />
-      <rect :x="NUT_X" :y="woodTop + woodHeight" :width="END_X - NUT_X" height="4" fill="#cfc5ad" />
+      <rect :x="NUT_X" :y="woodTop - 4" :width="NECK_END - NUT_X" height="4" fill="#e9e1cc" />
+      <rect :x="NUT_X" :y="woodTop + woodHeight" :width="NECK_END - NUT_X" height="4" fill="#cfc5ad" />
 
       <!-- Zone estimée de la main -->
       <rect
@@ -364,7 +366,7 @@ const isWound = (s) => s >= 3
           v-for="(open, s) in tuning"
           :key="'s' + s"
           :x1="NUT_X - 2"
-          :x2="END_X"
+          :x2="NECK_END"
           :y1="stringY(s)"
           :y2="stringY(s)"
           :stroke="isWound(s) ? 'url(#wound)' : 'url(#plain)'"
