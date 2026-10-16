@@ -26,7 +26,7 @@ export const ALLOWED_MISSES = 1 // fausses notes d'affilée tolérées
 export const MIN_PHRASE_NOTES = 3 // notes minimum pour annoncer la sensation de fin de phrase
 export const GLIDE_SEMITONES = 2 // écart maximal d'une note de passage avec la note précédente
 export const SLIDE_MIN_SEMITONES = 5 // écart minimal d'un grand slide
-const SLIDE_COVERAGE = 0.4 // part des demi-tons intermédiaires qu'on doit avoir entendus pendant le glissé
+const SLIDE_COVERAGE = 0.6 // part des demi-tons intermédiaires qu'on doit avoir entendus pendant le glissé
 
 const POINTS = { note: 10, explore: 5, fullScale: 100, resolution: 50, slide: 20 }
 
