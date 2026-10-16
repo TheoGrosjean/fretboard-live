@@ -189,8 +189,8 @@ const isWound = (s) => s >= 3
 </script>
 
 <template>
-  <div class="overflow-x-auto rounded-2xl bg-neutral-950 p-4 ring-1 ring-white/5 transition-shadow duration-500" :class="[GLOW[heat], { shake: shaking }]">
-    <svg :viewBox="`0 0 ${WIDTH} ${height}`" class="w-full min-w-275 select-none" role="img" aria-label="Manche de guitare">
+  <div class="overflow-x-auto overscroll-x-contain rounded-2xl bg-neutral-950 p-4 ring-1 ring-white/5 transition-shadow duration-500" :class="[GLOW[heat], { shake: shaking }]">
+    <svg :viewBox="`0 0 ${WIDTH} ${height}`" class="w-full min-w-225 select-none" role="img" aria-label="Manche de guitare">
       <defs>
         <!-- Ébène : presque noir, légèrement chaud -->
         <linearGradient id="ebony" x1="0" y1="0" x2="0" y2="1">

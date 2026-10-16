@@ -35,6 +35,11 @@ function persisted(key, initial) {
 }
 
 const sidebarOpen = persisted('sidebarOpen', true)
+// Mobile et tablette portrait : la barre latérale devient un tiroir par-dessus la page
+const narrowQuery = window.matchMedia('(max-width: 1023px)')
+const drawer = ref(narrowQuery.matches)
+narrowQuery.addEventListener('change', (e) => (drawer.value = e.matches))
+if (drawer.value) sidebarOpen.value = false
 const splash = ref(true) // animation de chargement au lancement
 const overlayType = persisted('overlayType', 'scale') // 'scale' | 'arpeggio' | 'none'
 const root = persisted('root', 9) // La
@@ -278,15 +283,21 @@ function toggleAudio() {
     <LoaderNeck @done="splash = false" />
   </div>
 
-  <div class="flex h-screen overflow-hidden bg-anthracite text-neutral-200">
+  <div class="flex min-h-screen bg-anthracite text-neutral-200 xl:h-screen xl:overflow-hidden">
+    <!-- Fond assombri derrière le tiroir (mobile) -->
+    <div v-if="drawer && sidebarOpen" class="fixed inset-0 z-30 bg-black/60" @click="sidebarOpen = false" />
     <!-- ========== Barre latérale ========== -->
     <aside
-      class="sticky top-0 flex h-screen shrink-0 flex-col border-r border-white/5 bg-neutral-900/70 backdrop-blur transition-[width] duration-200"
-      :class="sidebarOpen ? 'w-80' : 'w-16'"
+      class="flex h-screen shrink-0 flex-col border-r border-white/5"
+      :class="
+        drawer
+          ? ['fixed inset-y-0 left-0 z-40 w-80 max-w-[85vw] bg-neutral-900 transition-transform duration-200', sidebarOpen ? 'translate-x-0' : '-translate-x-full']
+          : ['sticky top-0 self-start bg-neutral-900/70 backdrop-blur transition-[width] duration-200', sidebarOpen ? 'w-80' : 'w-16']
+      "
     >
       <!-- Logo + bouton replier -->
-      <div class="flex h-16 shrink-0 items-center border-b border-white/5" :class="sidebarOpen ? 'justify-between px-5' : 'justify-center'">
-        <h1 v-if="sidebarOpen" class="text-lg font-black tracking-tight whitespace-nowrap text-white">
+      <div class="flex h-16 shrink-0 items-center border-b border-white/5" :class="sidebarOpen || drawer ? 'justify-between px-5' : 'justify-center'">
+        <h1 v-if="sidebarOpen || drawer" class="text-lg font-black tracking-tight whitespace-nowrap text-white">
           Fretboard <span class="text-copper-400">Live</span>
         </h1>
         <button
@@ -299,7 +310,7 @@ function toggleAudio() {
       </div>
 
       <!-- Barre repliée : colonne d'icônes -->
-      <nav v-if="!sidebarOpen" class="flex flex-col items-center gap-2 py-4">
+      <nav v-if="!sidebarOpen && !drawer" class="flex flex-col items-center gap-2 py-4">
         <button
           class="relative flex size-11 items-center justify-center rounded-xl transition"
           :class="audio.running.value ? 'bg-copper-500/15 text-copper-400 hover:bg-copper-500/25' : 'bg-copper-500 text-neutral-950 hover:bg-copper-400'"
@@ -535,14 +546,17 @@ function toggleAudio() {
     </aside>
 
     <!-- ========== Contenu principal ========== -->
-    <main class="flex h-screen min-w-0 flex-1 flex-col px-6 py-5 lg:px-8">
+    <main class="flex min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 sm:py-5 lg:px-8 xl:h-screen">
       <!-- En-tête : gamme courante + note jouée -->
       <header class="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-4">
-        <div>
+        <button v-if="drawer" class="-ml-1 rounded-lg p-2 text-neutral-400 hover:bg-white/5 hover:text-neutral-200" title="Réglages" @click="sidebarOpen = true">
+          <Icon name="menu" class="size-6" />
+        </button>
+        <div class="min-w-0 flex-1 basis-60">
           <div class="text-[11px] font-semibold tracking-widest text-neutral-500 uppercase">
             {{ overlayType === 'arpeggio' ? 'Arpège' : overlayType === 'scale' ? 'Gamme' : 'Manche libre' }}
           </div>
-          <h2 class="text-3xl font-black tracking-tight text-white">
+          <h2 class="text-2xl font-black tracking-tight text-white sm:text-3xl">
             {{ overlayTitle }}
             <span v-if="activeBox" class="text-copper-400">· Box {{ boxIndex }}</span>
           </h2>
@@ -617,7 +631,7 @@ function toggleAudio() {
       </div>
 
       <!-- Accordeur + historique -->
-      <div class="mt-4 grid min-h-0 flex-1 gap-4 overflow-y-auto xl:grid-cols-2 xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
+      <div class="mt-4 grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-2 xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
         <SpotifyPlayer :suggestion="backingSuggestion" @track-change="onTrackChange" @track-start="onTrackStart" @track-end="onTrackEnd" />
         <div class="flex min-h-0 flex-col gap-4">
           <ComboPanel
