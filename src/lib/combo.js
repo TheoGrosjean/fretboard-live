@@ -5,7 +5,7 @@
  * Règles :
  *  - +1 au combo par note dans la gamme ; multiplicateur ×1 → ×4 par paliers
  *  - droit à l'erreur : une fausse note isolée est pardonnée, deux d'affilée cassent le combo
- *  - anti-répétition : au-delà de 2 fois la même note d'affilée, le combo ne monte plus
+ *  - anti-répétition : au-delà de 8 fois la même note d'affilée, le combo ne monte plus
  *  - bonus d'exploration (nouvelle position sur le manche), de gamme complète et de résolution
  *    (phrase terminée sur la tonique suivie d'un silence)
  *  - le combo se perd après quelques secondes sans jouer
@@ -19,7 +19,7 @@ export const TIERS = [0, 10, 25, 50] // combo nécessaire pour ×1, ×2, ×3, ×
 export const MILESTONES = [10, 25, 50, 100, 150, 200, 300, 500]
 export const DECAY_MS = 5000 // silence avant la perte du combo
 export const PHRASE_GAP_MS = 1200 // silence qui marque la fin d'une phrase
-export const MAX_REPEATS = 2
+export const MAX_REPEATS = 8 // au-delà, la même note répétée ne fait plus monter le combo
 export const ALLOWED_MISSES = 1 // fausses notes d'affilée tolérées
 export const MIN_PHRASE_NOTES = 3 // notes minimum pour annoncer la sensation de fin de phrase
 export const GLIDE_SEMITONES = 2 // écart maximal d'une note de passage avec la note précédente

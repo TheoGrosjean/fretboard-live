@@ -3,6 +3,7 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import Fretboard from './components/Fretboard.vue'
 import Tuner from './components/Tuner.vue'
 import ComboPanel from './components/ComboPanel.vue'
+import ComboAnnouncement from './components/ComboAnnouncement.vue'
 import Icon from './components/Icon.vue'
 import SpotifyPlayer from './components/SpotifyPlayer.vue'
 import LoaderNeck from './components/loaders/LoaderNeck.vue'
@@ -509,20 +510,24 @@ function toggleAudio() {
       </header>
 
       <!-- Manche -->
-      <Fretboard
-        :tuning="tuning"
-        :frets="frets"
-        :overlay="overlay"
-        :notation="notation"
-        :label-mode="labelMode"
-        :played="played"
-        :alternates="alternates"
-        :anchor="anchor"
-        :focus="activeBox?.keys ?? null"
-        :heat="pattern ? combo.state.value.mult - 1 : 0"
-        :broke-at="combo.brokeAt.value"
-        @play="onFretClick"
-      />
+      <!-- Manche, avec les annonces du combo en grand au centre -->
+      <div class="relative shrink-0">
+        <Fretboard
+          :tuning="tuning"
+          :frets="frets"
+          :overlay="overlay"
+          :notation="notation"
+          :label-mode="labelMode"
+          :played="played"
+          :alternates="alternates"
+          :anchor="anchor"
+          :focus="activeBox?.keys ?? null"
+          :heat="pattern ? combo.state.value.mult - 1 : 0"
+          :broke-at="combo.brokeAt.value"
+          @play="onFretClick"
+        />
+        <ComboAnnouncement :announcement="combo.announcement.value" />
+      </div>
       <div class="mt-3 flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 text-xs text-neutral-500">
         <div class="flex flex-wrap items-center gap-4">
           <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-stone-900 ring-2 ring-copper-400" /> Tonique</span>
@@ -542,7 +547,6 @@ function toggleAudio() {
           <Tuner :midi-float="audio.midiFloat.value" :frequency="audio.frequency.value" :notation="notation" />
           <ComboPanel
             :state="combo.state.value"
-            :announcement="combo.announcement.value"
             :floater="combo.floater.value"
             :last-note-at="combo.lastNoteAt.value"
             :decay-ms="combo.decayMs"
