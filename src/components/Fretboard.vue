@@ -148,17 +148,19 @@ const headPath = computed(() => {
 // Le contour sort du cadre ; il s'efface en fondu vers la droite, le haut et le bas.
 const BODY_START = NECK_END - 500 // bord gauche de la zone du corps (épaule côté graves)
 // Proportions d'une Telecaster rapportées à la largeur du manche : l'épaule rejoint le manche
-// vers la 16e case, le pan coupé démarre vers la 20e ; le reste sort du cadre
+// à la 17e frette, le pan coupé démarre vers la 20e ; le reste sort du cadre
+const SHOULDER_FRET = 17
 const bodyGeometry = computed(() => {
   const E = NECK_END
   const T = woodTop - 4
   const B = woodTop + woodHeight.value + 4
+  const J = fretX(Math.min(SHOULDER_FRET, props.frets)) // jonction de l'épaule avec le manche
   const cutaway = `M ${E - 177} ${T} C ${E - 120} ${T - 8} ${E - 70} ${T - 110} ${E - 62} ${T - 198} C ${E - 55} ${T - 260} ${E - 200} ${T - 400} ${E - 385} ${T - 489}`
-  const shoulder = `M ${E - 420} ${B - 2} L ${E - 426} ${B + 4} C ${E - 450} ${B + 120} ${E - 470} ${B + 300} ${E - 488} ${B + 416}`
+  const shoulder = `M ${J + 6} ${B - 2} L ${J} ${B + 4} C ${J - 24} ${B + 120} ${J - 44} ${B + 300} ${J - 62} ${B + 416}`
   const fill = [
     cutaway,
-    `L ${WIDTH + 40} ${T - 489} L ${WIDTH + 40} ${B + 500} L ${E - 488} ${B + 500} L ${E - 488} ${B + 416}`,
-    `C ${E - 470} ${B + 300} ${E - 450} ${B + 120} ${E - 426} ${B + 4} L ${E - 420} ${B - 2} L ${E - 177} ${T} Z`,
+    `L ${WIDTH + 40} ${T - 489} L ${WIDTH + 40} ${B + 500} L ${J - 62} ${B + 500} L ${J - 62} ${B + 416}`,
+    `C ${J - 44} ${B + 300} ${J - 24} ${B + 120} ${J} ${B + 4} L ${J + 6} ${B - 2} L ${E - 177} ${T} Z`,
   ].join(' ')
   return { fill, edges: [cutaway, shoulder] }
 })
