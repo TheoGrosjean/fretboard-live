@@ -47,6 +47,9 @@ const showAlternates = persisted('showAlternates', true)
 const bodyFinish = persisted('bodyFinish', DEFAULT_BODY_FINISH)
 const matchHead = persisted('matchHead', false)
 watch(bodyFinish, applyAccent, { immediate: true }) // le thème du site suit la finition de la guitare
+// Sections dépliables de la barre latérale
+const openSections = persisted('openSections', { scale: true, audio: true, display: false })
+const toggleSection = (id) => (openSections.value = { ...openSections.value, [id]: !openSections.value[id] })
 const boxIndex = persisted('boxIndex', 0) // 0 = tout le manche, sinon numéro de la box
 
 const tuning = STANDARD_TUNING
@@ -319,11 +322,11 @@ function toggleAudio() {
       </nav>
 
       <!-- Barre dépliée : réglages -->
-      <div v-else class="flex-1 space-y-7 overflow-y-auto px-5 py-5">
+      <div v-else class="flex-1 space-y-5 overflow-y-auto px-5 py-5">
         <!-- Gamme / arpège -->
         <section>
-          <h2 class="section-title"><Icon name="music" class="size-4" /> Gamme / arpège</h2>
-          <div class="space-y-3">
+          <h2 class="section-title section-toggle" :class="{ 'is-closed': !openSections.scale }" @click="toggleSection('scale')"><Icon name="music" class="size-4" /> Gamme / arpège <svg class="chevron ml-auto size-4" :class="{ 'rotate-180': openSections.scale }" viewBox="0 0 20 20" fill="currentColor"><path d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4z" /></svg></h2>
+          <div v-show="openSections.scale" class="space-y-3">
             <div class="segmented grid-cols-3">
               <button
                 v-for="t in [
@@ -388,15 +391,16 @@ function toggleAudio() {
 
         <!-- Entrée audio -->
         <section>
-          <h2 class="section-title">
+          <h2 class="section-title section-toggle" :class="{ 'is-closed': !openSections.audio }" @click="toggleSection('audio')">
             <Icon name="mic" class="size-4" /> Entrée audio
             <span class="ml-auto flex items-center gap-1.5 text-[11px] font-normal tracking-normal normal-case" :class="audio.running.value ? 'text-copper-400' : 'text-neutral-600'">
               <span class="size-2 rounded-full" :class="audio.running.value ? 'animate-pulse bg-copper-400' : 'bg-neutral-700'" />
               {{ audio.running.value ? `${audio.sampleRate.value / 1000} kHz` : 'Arrêté' }}
             </span>
+            <svg class="chevron size-4" :class="{ 'rotate-180': openSections.audio }" viewBox="0 0 20 20" fill="currentColor"><path d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4z" /></svg>
           </h2>
 
-          <div class="space-y-3">
+          <div v-show="openSections.audio" class="space-y-3">
             <button
               class="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-semibold transition"
               :class="audio.running.value ? 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700' : 'bg-copper-500 text-neutral-950 hover:bg-copper-400'"
@@ -455,8 +459,8 @@ function toggleAudio() {
 
         <!-- Affichage -->
         <section>
-          <h2 class="section-title"><Icon name="sliders" class="size-4" /> Affichage</h2>
-          <div class="space-y-3">
+          <h2 class="section-title section-toggle" :class="{ 'is-closed': !openSections.display }" @click="toggleSection('display')"><Icon name="sliders" class="size-4" /> Affichage <svg class="chevron ml-auto size-4" :class="{ 'rotate-180': openSections.display }" viewBox="0 0 20 20" fill="currentColor"><path d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4z" /></svg></h2>
+          <div v-show="openSections.display" class="space-y-3">
             <div>
               <span class="field-label">Notation</span>
               <div class="segmented grid-cols-2">
@@ -645,6 +649,15 @@ function toggleAudio() {
 }
 .section-title {
   @apply mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-neutral-400 uppercase;
+}
+.section-toggle {
+  @apply -mx-2 cursor-pointer rounded-lg px-2 py-1 transition select-none hover:bg-white/5 hover:text-neutral-200;
+}
+.section-toggle.is-closed {
+  @apply mb-0;
+}
+.section-toggle .chevron {
+  @apply shrink-0 text-neutral-500 transition-transform;
 }
 .segmented {
   @apply grid gap-1 rounded-xl bg-neutral-800 p-1;
