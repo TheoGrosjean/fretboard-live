@@ -7,6 +7,7 @@ import ComboAnnouncement from './components/ComboAnnouncement.vue'
 import FinisherFight from './components/finishers/FinisherFight.vue'
 import { createTrackSession, recordEvent, sessionResult } from './lib/finisher'
 import Icon from './components/Icon.vue'
+import PageTabs from './components/PageTabs.vue'
 import SpotifyPlayer from './components/SpotifyPlayer.vue'
 import LoaderNeck from './components/loaders/LoaderNeck.vue'
 import { useAudioInput } from './composables/useAudioInput'
@@ -40,7 +41,9 @@ const narrowQuery = window.matchMedia('(max-width: 1023px)')
 const drawer = ref(narrowQuery.matches)
 narrowQuery.addEventListener('change', (e) => (drawer.value = e.matches))
 if (drawer.value) sidebarOpen.value = false
-const splash = ref(true) // animation de chargement au lancement
+const props = defineProps({ skipSplash: { type: Boolean, default: false } })
+// Animation de chargement au lancement, mais pas en revenant de l'onglet Ampli
+const splash = ref(!props.skipSplash)
 const overlayType = persisted('overlayType', 'scale') // 'scale' | 'arpeggio' | 'none'
 const root = persisted('root', 9) // La
 const scaleId = persisted('scaleId', 'penta-minor')
@@ -318,14 +321,6 @@ function toggleAudio() {
         <h1 v-if="sidebarOpen || drawer" class="text-lg font-black tracking-tight whitespace-nowrap text-white">
           Fretboard <span class="text-copper-400">Live</span>
         </h1>
-        <a
-          v-if="sidebarOpen || drawer"
-          href="#ampli"
-          class="ml-auto mr-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-neutral-400 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-neutral-100"
-          title="Simulateur d'ampli (en test)"
-        >
-          Ampli
-        </a>
         <button
           class="rounded-lg p-2 text-neutral-500 transition hover:bg-white/5 hover:text-neutral-200"
           :title="sidebarOpen ? 'Replier les réglages' : 'Déplier les réglages'"
@@ -356,7 +351,6 @@ function toggleAudio() {
         </button>
         <button class="rail-btn" title="Entrée audio" @click="sidebarOpen = true"><Icon name="mic" class="size-5" /></button>
         <button class="rail-btn" title="Affichage" @click="sidebarOpen = true"><Icon name="sliders" class="size-5" /></button>
-        <a class="rail-btn" href="#ampli" title="Simulateur d'ampli (en test)"><Icon name="volume" class="size-5" /></a>
       </nav>
 
       <!-- Barre dépliée : réglages -->
@@ -574,11 +568,16 @@ function toggleAudio() {
 
     <!-- ========== Contenu principal ========== -->
     <main class="flex min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 sm:py-5 lg:px-8 xl:h-screen">
-      <!-- En-tête : gamme courante + note jouée -->
-      <header class="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-4">
+      <!-- Onglets Manche / Ampli, au même endroit que sur la page Ampli -->
+      <div class="mb-3 flex shrink-0 items-center gap-3">
         <button v-if="drawer" class="-ml-1 rounded-lg p-2 text-neutral-400 hover:bg-white/5 hover:text-neutral-200" title="Réglages" @click="sidebarOpen = true">
           <Icon name="menu" class="size-6" />
         </button>
+        <PageTabs current="manche" class="ml-auto" />
+      </div>
+
+      <!-- En-tête : gamme courante + note jouée -->
+      <header class="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div class="min-w-0 flex-1 basis-60">
           <div class="text-[11px] font-semibold tracking-widest text-neutral-500 uppercase">
             {{ overlayType === 'arpeggio' ? 'Arpège' : overlayType === 'scale' ? 'Gamme' : 'Manche libre' }}

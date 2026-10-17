@@ -3,6 +3,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Knob from './components/amp/Knob.vue'
 import Icon from './components/Icon.vue'
+import PageTabs from './components/PageTabs.vue'
 import { DEFAULT_PRESET, PRESETS, createAmp } from './lib/ampChain'
 import { DEFAULT_BODY_FINISH, applyAccent } from './lib/noteStyles'
 
@@ -194,11 +195,8 @@ onBeforeUnmount(stop)
   <div class="stage min-h-screen px-4 pt-5 pb-10 text-neutral-200 sm:px-8">
     <!-- Onglets -->
     <nav class="relative z-10 mx-auto mb-8 flex max-w-5xl items-center gap-4">
-      <h1 class="text-lg font-black tracking-tight text-white">Fretboard <span class="text-copper-400">Live</span></h1>
-      <div class="ml-auto flex rounded-xl bg-neutral-900/80 p-1 text-sm ring-1 ring-white/5 backdrop-blur">
-        <a href="#" class="rounded-lg px-4 py-1.5 font-medium text-neutral-400 transition hover:text-neutral-100">Manche</a>
-        <span class="rounded-lg bg-neutral-200 px-4 py-1.5 font-semibold text-neutral-950">Ampli <span class="text-[10px] font-bold text-copper-600 uppercase">test</span></span>
-      </div>
+      <h1 class="text-lg font-black tracking-tight whitespace-nowrap text-white">Fretboard <span class="text-copper-400">Live</span></h1>
+      <PageTabs current="ampli" class="ml-auto" />
     </nav>
 
     <main class="relative z-10 mx-auto max-w-5xl space-y-8">

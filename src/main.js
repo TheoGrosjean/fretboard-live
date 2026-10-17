@@ -6,7 +6,21 @@ import Compare from './Compare.vue'
 
 // Onglets par adresse : /#ampli (simulateur d'ampli, en test), /#compare (finitions du corps), sinon le manche
 const PAGES = { '#ampli': Amp, '#compare': Compare }
-createApp(PAGES[location.hash] ?? App).mount('#app')
+// Arrivée par un changement d'onglet (et non à l'ouverture du site) : pas d'animation de chargement
+let fromTabSwitch = false
+try {
+  fromTabSwitch = sessionStorage.getItem('fb.tabSwitch') === '1'
+  sessionStorage.removeItem('fb.tabSwitch')
+} catch {}
 
-// Changer d'onglet recharge la page : chacun ouvre sa propre entrée audio
-window.addEventListener('hashchange', () => location.reload())
+const page = PAGES[location.hash] ?? App
+createApp(page, page === App ? { skipSplash: fromTabSwitch } : null).mount('#app')
+
+// Changer d'onglet recharge la page : chacun ouvre sa propre entrée audio.
+// On le signale pour ne pas rejouer l'animation de chargement du manche.
+window.addEventListener('hashchange', () => {
+  try {
+    sessionStorage.setItem('fb.tabSwitch', '1')
+  } catch {}
+  location.reload()
+})
