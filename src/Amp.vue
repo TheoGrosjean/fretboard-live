@@ -2,6 +2,8 @@
 // Onglet « Ampli » (phase de test) : la guitare passe dans un mini simulateur d'ampli, en direct
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Knob from './components/amp/Knob.vue'
+import PowerSwitch from './components/amp/PowerSwitch.vue'
+import Pedal from './components/amp/Pedal.vue'
 import Icon from './components/Icon.vue'
 import PageTabs from './components/PageTabs.vue'
 import { DEFAULT_PRESET, PRESETS, createAmp } from './lib/ampChain'
@@ -30,12 +32,12 @@ const KNOBS = [
   { id: 'delay', label: 'Delay', group: 'fx' },
 ]
 const PRESET_NAMES = { clean: 'Clean', crunch: 'Crunch', lead: 'Lead' }
-// Pédales du pédalier (une par preset)
+// Pédales du pédalier (une par preset) ; les mini-potards montrent les réglages du preset
 const PEDALS = [
-  { id: 'clean', name: 'Clean', sub: 'Sparkle', body: '#d8cfbd', ink: '#2b2520' },
-  { id: 'crunch', name: 'Crunch', sub: 'Plexi drive', body: 'var(--color-copper-500)', ink: '#1a1410' },
-  { id: 'lead', name: 'Lead', sub: 'Hot rod', body: '#9f1d1d', ink: '#fde8e8' },
-]
+  { id: 'clean', name: 'Clean', sub: 'Sparkle', type: 'script', body: '#d9d0bd', ink: '#2b2520', knobs: [['Level', 'master'], ['Tone', 'treble'], ['Verb', 'reverb']] },
+  { id: 'crunch', name: 'Crunch', sub: 'Plexi drive', type: 'block', body: 'color-mix(in srgb, var(--color-copper-500) 62%, #3a2f27)', ink: '#f5ead8', knobs: [['Gain', 'gain'], ['Tone', 'treble'], ['Level', 'master']] },
+  { id: 'lead', name: 'Lead', sub: 'Hot rod', type: 'block', body: '#6e1a1a', ink: '#f5e1d8', knobs: [['Drive', 'gain'], ['Mid', 'mid'], ['Delay', 'delay']] },
+].map((p) => ({ ...p, knobs: p.knobs.map(([label, id]) => ({ label, value: PRESETS[p.id][id] })) }))
 const TUBES = 4
 
 // Vu-mètre : aiguille de -48° à +48°
@@ -187,19 +189,43 @@ watch(outputId, (id) => {
   ctx?.setSinkId?.(id).catch((e) => (error.value = `Sortie indisponible : ${e.message}`))
 })
 
-onMounted(() => navigator.mediaDevices && refreshDevices())
-onBeforeUnmount(stop)
+// Sur ordinateur, toute la page tient dans l'écran sans défilement : on la réduit juste ce qu'il faut
+const stage = ref(null)
+const mainEl = ref(null)
+function fitToScreen() {
+  const el = stage.value
+  if (!el) return
+  el.style.zoom = ''
+  el.style.minHeight = ''
+  if (innerWidth < 1024) return
+  const natural = mainEl.value.getBoundingClientRect().bottom - el.getBoundingClientRect().top + parseFloat(getComputedStyle(el).paddingBottom)
+  const scale = Math.max(0.7, Math.min(1, innerHeight / natural))
+  if (scale === 1) return
+  el.style.zoom = String(scale)
+  el.style.minHeight = `${innerHeight / scale}px` // le fond couvre toujours tout l'écran
+}
+
+onMounted(() => {
+  navigator.mediaDevices && refreshDevices()
+  fitToScreen()
+  addEventListener('resize', fitToScreen)
+  document.fonts?.ready.then(fitToScreen)
+})
+onBeforeUnmount(() => {
+  stop()
+  removeEventListener('resize', fitToScreen)
+})
 </script>
 
 <template>
-  <div class="stage min-h-screen px-4 pt-5 pb-10 text-neutral-200 sm:px-8">
+  <div ref="stage" class="stage min-h-screen px-4 pt-5 pb-6 text-neutral-200 sm:px-8">
     <!-- Onglets -->
-    <nav class="relative z-10 mx-auto mb-8 flex max-w-5xl items-center gap-4">
+    <nav class="relative z-10 mx-auto mb-5 flex max-w-5xl items-center gap-4">
       <h1 class="text-lg font-black tracking-tight whitespace-nowrap text-white">Fretboard <span class="text-copper-400">Live</span></h1>
       <PageTabs current="ampli" class="ml-auto" />
     </nav>
 
-    <main class="relative z-10 mx-auto max-w-5xl space-y-8">
+    <main ref="mainEl" class="relative z-10 mx-auto max-w-5xl space-y-5">
       <!-- ========== Tête d'ampli ========== -->
       <section class="amp" :class="{ on: running }" :style="{ '--drive': outLevel }">
         <div class="handle" aria-hidden="true"><span /></div>
@@ -237,7 +263,7 @@ onBeforeUnmount(stop)
               <!-- Power + voyant -->
               <button class="mx-auto flex items-center gap-3 lg:mx-0 lg:flex-col lg:gap-2" :title="running ? 'Éteindre' : 'Allumer'" @click="toggle">
                 <span class="jewel" />
-                <span class="toggle"><span /></span>
+                <PowerSwitch :on="running" />
                 <span class="silk-label">Power</span>
               </button>
             </div>
@@ -254,24 +280,14 @@ onBeforeUnmount(stop)
             <span class="hidden text-[11px] text-neutral-600 sm:inline">clique une pédale pour charger le preset</span>
           </div>
           <div class="grid grid-cols-3 gap-3 sm:gap-4">
-            <button
-              v-for="p in PEDALS"
-              :key="p.id"
-              class="pedal"
-              :class="{ active: preset === p.id }"
-              :style="{ '--body': p.body, '--ink': p.ink }"
-              @click="params = { ...PRESETS[p.id] }"
-            >
-              <span class="led" />
-              <span class="pedal-name">{{ p.name }}</span>
-              <span class="pedal-sub">{{ p.sub }}</span>
-              <span class="footswitch" />
+            <button v-for="p in PEDALS" :key="p.id" class="pedal" :title="`Charger le preset ${p.name}`" @click="params = { ...PRESETS[p.id] }">
+              <Pedal :name="p.name" :sub="p.sub" :type="p.type" :body="p.body" :ink="p.ink" :knobs="p.knobs" :active="preset === p.id" />
             </button>
           </div>
         </section>
 
         <!-- ========== Vu-mètres ========== -->
-        <section class="rack">
+        <section class="rack flex flex-col justify-center">
           <div class="grid grid-cols-2 gap-3">
             <div v-for="m in [{ label: 'Input', v: inLevel }, { label: 'Output', v: outLevel }]" :key="m.label" class="vu">
               <svg viewBox="0 0 200 124" class="w-full">
@@ -294,42 +310,42 @@ onBeforeUnmount(stop)
             <span class="flex items-center gap-2"><span class="led-sm" :class="{ lit: running && gateOpen }" /> Gate</span>
             <span class="lcd">{{ running && latency !== null ? `${String(latency).padStart(2, '0')} ms` : '-- ms' }}</span>
           </div>
+
+          <!-- Branchements (ancien panneau arrière), sous le gate -->
+          <div class="mt-4 border-t border-white/5 pt-3">
+            <div class="mb-2 flex items-center gap-2 text-[11px] font-semibold tracking-widest text-neutral-500 uppercase">
+              Branchements
+              <span class="text-amber-200/70" title="Casque ou moniteurs branchés sur la Focusrite, Direct Monitor coupé : tu n'entends que l'ampli.">
+                <Icon name="volume" class="size-3.5" />
+              </span>
+            </div>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2">
+              <label class="col-span-2 block">
+                <span class="rear-label">Input</span>
+                <select v-model="deviceId" class="field">
+                  <option v-if="!inputs.length" value="">Allume l'ampli pour voir tes interfaces</option>
+                  <option v-for="d in inputs" :key="d.deviceId" :value="d.deviceId">{{ d.label || 'Entrée audio' }}</option>
+                </select>
+              </label>
+              <label class="block" :class="{ 'col-span-2': !canPickOutput }">
+                <span class="rear-label">Channel</span>
+                <select v-model="channel" class="field">
+                  <option value="mix">Toutes les entrées</option>
+                  <option value="0">Entrée 1</option>
+                  <option value="1">Entrée 2</option>
+                </select>
+              </label>
+              <label v-if="canPickOutput" class="block">
+                <span class="rear-label">Output</span>
+                <select v-model="outputId" class="field">
+                  <option value="">Sortie par défaut</option>
+                  <option v-for="d in outputs" :key="d.deviceId" :value="d.deviceId">{{ d.label || 'Sortie audio' }}</option>
+                </select>
+              </label>
+            </div>
+          </div>
         </section>
       </div>
-
-      <!-- ========== Panneau arrière : branchements ========== -->
-      <section class="rear">
-        <span v-for="c in ['tl', 'tr', 'bl', 'br']" :key="c" class="screw" :class="c" aria-hidden="true" />
-        <h2 class="mb-4 text-xs font-semibold tracking-widest text-neutral-500 uppercase">Panneau arrière</h2>
-        <div class="grid gap-4 md:grid-cols-3">
-          <label class="block">
-            <span class="rear-label">Input</span>
-            <select v-model="deviceId" class="field">
-              <option v-if="!inputs.length" value="">Allume l'ampli pour voir tes interfaces</option>
-              <option v-for="d in inputs" :key="d.deviceId" :value="d.deviceId">{{ d.label || 'Entrée audio' }}</option>
-            </select>
-          </label>
-          <label class="block">
-            <span class="rear-label">Channel</span>
-            <select v-model="channel" class="field">
-              <option value="mix">Toutes les entrées</option>
-              <option value="0">Entrée 1</option>
-              <option value="1">Entrée 2</option>
-            </select>
-          </label>
-          <label v-if="canPickOutput" class="block">
-            <span class="rear-label">Output</span>
-            <select v-model="outputId" class="field">
-              <option value="">Sortie par défaut du système</option>
-              <option v-for="d in outputs" :key="d.deviceId" :value="d.deviceId">{{ d.label || 'Sortie audio' }}</option>
-            </select>
-          </label>
-        </div>
-        <p class="mt-4 flex gap-2 text-xs leading-relaxed text-amber-200/80">
-          <Icon name="volume" class="mt-0.5 size-4 shrink-0" />
-          <span>Casque ou moniteurs branchés sur la Focusrite, <b>Direct Monitor</b> coupé : tu n'entends que l'ampli.</span>
-        </p>
-      </section>
 
       <p v-if="error" class="rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{{ error }}</p>
       <p class="text-center text-xs text-neutral-600">Potards : glisse vers le haut ou le bas (Maj = réglage fin), molette ou flèches · double-clic = valeur Crunch</p>
@@ -344,6 +360,8 @@ onBeforeUnmount(stop)
 .stage {
   background:
     radial-gradient(ellipse 70% 45% at 50% 0%, color-mix(in srgb, var(--color-copper-500) 16%, transparent), transparent 70%),
+    /* spot sur le mur derrière la tête : fait ressortir son ombre portée */
+    radial-gradient(ellipse 62% 420px at 50% 290px, color-mix(in srgb, var(--color-copper-300) 18%, #3b3531), transparent 78%),
     radial-gradient(ellipse 120% 60% at 50% 110%, #0d0c0b, transparent 60%),
     #1a1918;
 }
@@ -400,8 +418,30 @@ onBeforeUnmount(stop)
     inset 0 0 0 2px #070605,
     inset 0 0 0 5px color-mix(in srgb, var(--color-copper-400) 55%, transparent),
     inset 0 0 0 7px #070605,
-    0 40px 60px -20px rgba(0, 0, 0, 0.8),
-    0 0 0 1px rgba(255, 255, 255, 0.04);
+    /* volume : arête du haut qui accroche la lumière, bas dans l'ombre */
+    inset 0 9px 6px -6px rgba(255, 255, 255, 0.07),
+    inset 0 -14px 18px -8px rgba(0, 0, 0, 0.6),
+    /* profondeur : ombres en couches, de la plus serrée à la plus diffuse */
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 2px 3px rgba(0, 0, 0, 0.6),
+    0 10px 18px -4px rgba(0, 0, 0, 0.65),
+    0 30px 50px -10px rgba(0, 0, 0, 0.75),
+    0 60px 100px -20px rgba(0, 0, 0, 0.7),
+    0 0 120px 10px rgba(0, 0, 0, 0.45);
+}
+/* Ombre au sol sous la tête */
+.cabinet::after {
+  content: '';
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: -34px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.75), transparent);
+  filter: blur(6px);
+  z-index: -1;
+  pointer-events: none;
 }
 @media (min-width: 640px) {
   .cabinet {
@@ -566,23 +606,26 @@ onBeforeUnmount(stop)
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
 }
 
-/* Façade en métal brossé, teintée par l'accent de la guitare */
+/* Façade en métal brossé foncé, à peine teintée par l'accent de la guitare */
 .faceplate {
-  --silk: #1c1612;
+  --silk: #ece3d0;
   margin-top: 16px;
   padding: 18px 20px 14px;
   border-radius: 10px;
   background:
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse 60% 120% at 30% 0%, rgba(255, 255, 255, 0.07), transparent 70%),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--color-copper-300) 55%, #f6e2b8) 0%,
-      color-mix(in srgb, var(--color-copper-400) 65%, #c4924a) 45%,
-      color-mix(in srgb, var(--color-copper-600) 70%, #7a5222) 100%
+      color-mix(in srgb, var(--color-copper-500) 12%, #35312d) 0%,
+      color-mix(in srgb, var(--color-copper-500) 9%, #221f1c) 55%,
+      color-mix(in srgb, var(--color-copper-500) 7%, #171513) 100%
     );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.25),
+    inset 0 0 0 1px color-mix(in srgb, var(--color-copper-400) 45%, transparent),
+    inset 0 0 0 3px rgba(0, 0, 0, 0.55),
+    inset 0 4px 0 -1px rgba(255, 255, 255, 0.08),
+    inset 0 -6px 10px -4px rgba(0, 0, 0, 0.6),
     0 3px 10px rgba(0, 0, 0, 0.6);
 }
 .silk-label {
@@ -599,38 +642,28 @@ onBeforeUnmount(stop)
   background: radial-gradient(circle, #000 0 28%, #6b7078 30% 48%, #e5e7eb 52% 62%, #4b5563 66%);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
-.toggle {
-  position: relative;
-  width: 22px;
-  height: 34px;
-  border-radius: 6px;
-  background: #0c0a09;
-  box-shadow: inset 0 0 0 2px #3f3a36;
-}
-.toggle > span {
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  top: 4px;
-  height: 14px;
-  border-radius: 3px;
-  background: linear-gradient(#f4f4f5, #9ca3af);
-  transition: top 0.15s;
-}
-.amp.on .toggle > span {
-  top: 16px;
-}
 .jewel {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 999px;
-  border: 3px solid #a8a29e;
-  background: radial-gradient(circle at 35% 30%, #7f1d1d, #2a0707);
-  transition: box-shadow 0.3s;
+  /* voyant serti dans une bague chromée, couleur d'accent quand l'ampli est allumé */
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--color-copper-500) 35%, #1a1412), #060404 75%);
+  box-shadow:
+    0 0 0 2px #0b0b0b,
+    0 0 0 3.5px #9ca3af,
+    0 0 0 4.5px #1f2937,
+    0 3px 6px 3px rgba(0, 0, 0, 0.5);
+  transition:
+    background 0.3s,
+    box-shadow 0.3s;
 }
 .amp.on .jewel {
-  background: radial-gradient(circle at 35% 30%, #fee2e2, #ef4444 45%, #7f1d1d);
-  box-shadow: 0 0 18px 5px rgba(239, 68, 68, 0.6);
+  background: radial-gradient(circle at 35% 30%, #fff8ec, var(--color-copper-300) 30%, var(--color-copper-500) 60%, color-mix(in srgb, var(--color-copper-600) 60%, #000));
+  box-shadow:
+    0 0 0 2px #0b0b0b,
+    0 0 0 3.5px #9ca3af,
+    0 0 0 4.5px #1f2937,
+    0 0 16px 5px color-mix(in srgb, var(--color-copper-500) 55%, transparent);
 }
 
 /* ---------- Pédalier ---------- */
@@ -645,24 +678,11 @@ onBeforeUnmount(stop)
     0 20px 40px -20px rgba(0, 0, 0, 0.8);
 }
 .pedal {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 14px 8px 14px;
+  display: block;
+  padding: 0 6px;
   border-radius: 12px;
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.28), transparent 40%, rgba(0, 0, 0, 0.25)),
-    var(--body);
-  color: var(--ink);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.25),
-    0 10px 18px -6px rgba(0, 0, 0, 0.8);
-  transition:
-    transform 0.1s,
-    box-shadow 0.1s;
+  outline: none;
+  transition: transform 0.12s;
 }
 .pedal:hover {
   transform: translateY(-2px);
@@ -670,47 +690,8 @@ onBeforeUnmount(stop)
 .pedal:active {
   transform: translateY(1px);
 }
-.pedal .led {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: #3b0a0a;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
-}
-.pedal.active .led {
-  background: #ff3b3b;
-  box-shadow:
-    0 0 10px 3px rgba(255, 59, 59, 0.7),
-    inset 0 1px 1px rgba(255, 255, 255, 0.6);
-}
-.pedal-name {
-  margin-top: 8px;
-  font-size: 18px;
-  font-weight: 900;
-  font-style: italic;
-  letter-spacing: -0.02em;
-  line-height: 1;
-}
-.pedal-sub {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-  opacity: 0.7;
-}
-.footswitch {
-  margin-top: 12px;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: radial-gradient(circle at 35% 30%, #fafafa, #a1a1aa 45%, #3f3f46);
-  box-shadow:
-    0 0 0 4px rgba(0, 0, 0, 0.35),
-    0 4px 6px rgba(0, 0, 0, 0.5);
-  transition: transform 0.1s;
-}
-.pedal.active .footswitch {
-  transform: scale(0.92);
+.pedal:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-copper-400);
 }
 
 /* ---------- Vu-mètres ---------- */
@@ -757,52 +738,16 @@ onBeforeUnmount(stop)
   text-shadow: 0 0 6px rgba(251, 191, 119, 0.6);
 }
 
-/* ---------- Panneau arrière ---------- */
-.rear {
-  position: relative;
-  padding: 22px 26px;
-  border-radius: 14px;
-  background:
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px),
-    linear-gradient(#2b2a29, #1e1d1c);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.5);
-}
-.screw {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background:
-    linear-gradient(45deg, transparent 44%, #1c1917 44% 56%, transparent 56%),
-    radial-gradient(circle at 35% 30%, #e5e7eb, #6b7280);
-}
-.screw.tl {
-  top: 9px;
-  left: 9px;
-}
-.screw.tr {
-  top: 9px;
-  right: 9px;
-}
-.screw.bl {
-  bottom: 9px;
-  left: 9px;
-}
-.screw.br {
-  bottom: 9px;
-  right: 9px;
-}
+/* ---------- Branchements ---------- */
 .rear-label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.3em;
   color: #a8a29e;
 }
 .field {
-  @apply w-full rounded-lg bg-neutral-950/70 px-3 py-2 text-sm text-neutral-200 ring-1 ring-white/10 outline-none focus:ring-copper-400/60;
+  @apply w-full rounded-lg bg-neutral-950/70 px-3 py-1.5 text-sm text-neutral-200 ring-1 ring-white/10 outline-none focus:ring-copper-400/60;
 }
 </style>

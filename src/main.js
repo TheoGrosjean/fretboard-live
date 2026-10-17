@@ -13,6 +13,12 @@ try {
   sessionStorage.removeItem('fb.tabSwitch')
 } catch {}
 
+// Fondu d'entrée quand on arrive d'un autre onglet
+if (fromTabSwitch) {
+  document.documentElement.classList.add('page-enter')
+  setTimeout(() => document.documentElement.classList.remove('page-enter'), 600)
+}
+
 const page = PAGES[location.hash] ?? App
 createApp(page, page === App ? { skipSplash: fromTabSwitch } : null).mount('#app')
 

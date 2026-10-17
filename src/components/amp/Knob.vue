@@ -73,32 +73,72 @@ function onKey(e) {
       @dblclick="model = defaultValue"
     >
       <defs>
-        <radialGradient id="knob-skirt" cx="0.45" cy="0.35" r="0.75">
-          <stop offset="0" stop-color="#3b3632" />
-          <stop offset="1" stop-color="#0c0a09" />
+        <!-- Lumière fixe venant d'en haut à gauche : seuls le crantage et le repère tournent -->
+        <linearGradient id="knob-side" x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stop-color="#5a524b" />
+          <stop offset="0.45" stop-color="#1f1b18" />
+          <stop offset="1" stop-color="#030202" />
+        </linearGradient>
+        <linearGradient id="knob-bevel" x1="0.25" y1="0" x2="0.75" y2="1">
+          <stop offset="0" stop-color="#8a8178" />
+          <stop offset="0.5" stop-color="#2a2522" />
+          <stop offset="1" stop-color="#000" />
+        </linearGradient>
+        <radialGradient id="knob-cap" cx="0.38" cy="0.32" r="0.8">
+          <stop offset="0" stop-color="#fffaf0" />
+          <stop offset="0.18" stop-color="#f3dca6" />
+          <stop offset="0.55" stop-color="#c9a05a" />
+          <stop offset="0.85" stop-color="#8a6326" />
+          <stop offset="1" stop-color="#5c3f14" />
         </radialGradient>
-        <radialGradient id="knob-top" cx="0.35" cy="0.3" r="0.9">
-          <stop offset="0" stop-color="#fff7e0" />
-          <stop offset="0.35" stop-color="#e9c98a" />
-          <stop offset="0.75" stop-color="#a77b38" />
-          <stop offset="1" stop-color="#6b4a1c" />
-        </radialGradient>
-        <filter id="knob-shadow" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000" flood-opacity="0.55" />
-        </filter>
+        <linearGradient id="knob-rim" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fff" stop-opacity="0.55" />
+          <stop offset="0.4" stop-color="#fff" stop-opacity="0" />
+          <stop offset="0.8" stop-color="#fff" stop-opacity="0" />
+          <stop offset="1" stop-color="#ffe3a8" stop-opacity="0.45" />
+        </linearGradient>
+        <filter id="knob-blur3" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3" /></filter>
+        <filter id="knob-blur1" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="1.2" /></filter>
       </defs>
       <!-- Sérigraphie -->
       <g class="silk">
         <line v-for="t in ticks" :key="'t' + t.n" :x1="t.x1" :y1="t.y1" :x2="t.x2" :y2="t.y2" :stroke-width="t.major ? 2.2 : 1.4" />
         <text v-for="t in ticks.filter((t) => t.major)" :key="'n' + t.n" :x="t.tx" :y="t.ty + 5" text-anchor="middle" font-size="14" font-weight="800">{{ t.n }}</text>
       </g>
-      <!-- Jupe noire crantée + capuchon doré, qui tournent ensemble -->
-      <g :transform="`rotate(${angle} 50 50)`" filter="url(#knob-shadow)">
-        <circle cx="50" cy="50" r="36" fill="url(#knob-skirt)" />
-        <circle cx="50" cy="50" r="36" fill="none" stroke="#000" stroke-width="3" stroke-dasharray="2.2 2.6" opacity="0.7" />
-        <circle cx="50" cy="50" r="22" fill="url(#knob-top)" stroke="#3a2a12" stroke-width="1" />
-        <circle cx="50" cy="50" r="15" fill="none" stroke="#fff3" stroke-width="0.8" />
-        <line x1="50" y1="16" x2="50" y2="31" stroke="#f5f5f4" stroke-width="4" stroke-linecap="round" />
+      <!-- Ombres portées sur la façade : large et diffuse, puis contact serré -->
+      <ellipse cx="57" cy="62" rx="37" ry="36" fill="#000" opacity="0.6" filter="url(#knob-blur3)" />
+      <circle cx="52" cy="54" r="36.5" fill="#000" opacity="0.7" filter="url(#knob-blur1)" />
+      <!-- Tranche de la jupe (cylindre éclairé d'en haut à gauche) -->
+      <circle cx="50" cy="50" r="36" fill="url(#knob-side)" />
+      <!-- Crantage : tourne avec le potard -->
+      <g :transform="`rotate(${angle} 50 50)`">
+        <circle cx="50" cy="50" r="34" fill="none" stroke="#000" stroke-width="4" stroke-dasharray="1.6 1.96" opacity="0.65" />
+        <circle cx="50" cy="50" r="34" fill="none" stroke="#9a9088" stroke-width="4" stroke-dasharray="0.6 2.96" stroke-dashoffset="-1.8" opacity="0.35" />
+      </g>
+      <circle cx="50" cy="50" r="36" fill="none" stroke="url(#knob-rim)" stroke-width="1.2" />
+      <!-- Biseau entre la jupe et le capuchon -->
+      <circle cx="50" cy="50" r="30" fill="url(#knob-bevel)" />
+      <circle cx="50" cy="50" r="27.5" fill="#0c0a09" />
+      <!-- Repère blanc sur la jupe : tourne avec le potard -->
+      <g :transform="`rotate(${angle} 50 50)`">
+        <line x1="50.8" y1="15.5" x2="50.8" y2="27" stroke="#000" stroke-width="4" stroke-linecap="round" opacity="0.5" />
+        <line x1="50" y1="15" x2="50" y2="26.5" stroke="#f5f5f4" stroke-width="3.6" stroke-linecap="round" />
+      </g>
+      <!-- Capuchon doré bombé, cerclage brossé et reflet fixes -->
+      <circle cx="50" cy="50" r="26" fill="url(#knob-cap)" />
+      <g fill="none" stroke-width="0.6">
+        <circle cx="50" cy="50" r="22" stroke="#fff" opacity="0.18" />
+        <circle cx="50" cy="50" r="17.5" stroke="#5c3f14" opacity="0.25" />
+        <circle cx="50" cy="50" r="13" stroke="#fff" opacity="0.15" />
+        <circle cx="50" cy="50" r="8.5" stroke="#5c3f14" opacity="0.2" />
+      </g>
+      <circle cx="50" cy="50" r="25.5" fill="none" stroke="url(#knob-rim)" stroke-width="1.4" />
+      <circle cx="50" cy="50" r="26" fill="none" stroke="#3a2a10" stroke-width="0.8" opacity="0.8" />
+      <ellipse cx="41" cy="38" rx="11" ry="6.5" transform="rotate(-35 41 38)" fill="#fff" opacity="0.55" filter="url(#knob-blur1)" />
+      <!-- Encoche gravée sur le capuchon : tourne avec le potard -->
+      <g :transform="`rotate(${angle} 50 50)`">
+        <line x1="50" y1="26.5" x2="50" y2="36" stroke="#3a2608" stroke-width="2" stroke-linecap="round" opacity="0.75" />
+        <line x1="50.9" y1="26.8" x2="50.9" y2="36" stroke="#fff4d6" stroke-width="0.8" stroke-linecap="round" opacity="0.6" />
       </g>
     </svg>
     <div class="label -mt-1 text-[10px] font-black tracking-[0.1em] uppercase sm:text-[11px] sm:tracking-[0.22em]">{{ label }}</div>
