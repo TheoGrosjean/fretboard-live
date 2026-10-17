@@ -3,6 +3,7 @@ import { feelingFor } from '../lib/feelings'
 import { DECAY_MS, checkSilence, createRun, multiplierFor, playNote, tierProgress } from '../lib/combo'
 
 const RECORDS_KEY = 'fb.records'
+const BEND_SIZES = { 1: '½ ton', 2: '1 ton', 3: '1 ton ½' }
 
 function loadRecords() {
   try {
@@ -74,6 +75,7 @@ export function useCombo({ scaleKey, scaleSize, onEvent = () => {} }) {
       else if (e.type === 'milestone') announce(`${e.combo} COMBO !`)
       else if (e.type === 'slide')
         announce('SLIDE', 'copper', { sub: `${e.span} cases ${e.up ? 'vers le corps' : 'vers la tête'}`, effect: e.up ? 'slide-up' : 'slide-down', duration: 1500 })
+      else if (e.type === 'bend') announce('BEND', 'copper', { sub: BEND_SIZES[e.steps] ?? `${e.steps / 2} tons`, effect: 'bend', duration: 1500 })
       else if (e.type === 'warning') announce('Attention, 1 erreur', 'warn')
       else if (e.type === 'repeat') announce('Varie les notes !', 'warn')
       else if (e.type === 'break') {

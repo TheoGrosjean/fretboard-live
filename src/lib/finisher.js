@@ -26,6 +26,16 @@ export function recordEvent(session, e) {
   } else if (e.type === 'phrase-end') session.feelings[e.interval] = (session.feelings[e.interval] ?? 0) + 1
 }
 
+/**
+ * « Ton style » : la sensation de fin de phrase la plus jouée, hors tonique — presque toutes les phrases
+ * se terminent en « Résolution », ce qui ne dit rien du jeu. La tonique ne compte que si c'est la seule.
+ */
+export function styleFor(feelings) {
+  const ranked = Object.entries(feelings).sort((a, b) => b[1] - a[1])
+  const favourite = ranked.find(([interval]) => Number(interval) !== 0) ?? ranked[0]
+  return favourite ? feelingFor(Number(favourite[0])).word : '—'
+}
+
 export function rankFor(accuracy, bestCombo) {
   if (accuracy >= 92 && bestCombo >= 50) return 'S'
   if (accuracy >= 85 && bestCombo >= 25) return 'A'
@@ -40,7 +50,6 @@ export function sessionResult(session, previousRecord = 0) {
   if (!session || session.notes < MIN_NOTES) return null
   const accuracy = Math.round((session.hits / session.notes) * 100)
   const rank = rankFor(accuracy, session.bestCombo)
-  const favourite = Object.entries(session.feelings).sort((a, b) => b[1] - a[1])[0]
   return {
     rank,
     word: WORDS[rank],
@@ -50,6 +59,6 @@ export function sessionResult(session, previousRecord = 0) {
     bestCombo: session.bestCombo,
     accuracy,
     newRecord: session.score > previousRecord,
-    style: favourite ? feelingFor(Number(favourite[0])).word : '—',
+    style: styleFor(session.feelings),
   }
 }

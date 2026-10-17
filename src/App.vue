@@ -183,11 +183,13 @@ function openGame() {
 }
 function closeGame() {
   gameOpen.value = false
+  audio.setDuo(false) // retour à une seule guitare
   if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
 }
-function onGameStart() {
+function onGameStart({ duo = false } = {}) {
   combo.reset()
   history.value = []
+  audio.setDuo(duo) // Jam : les entrées 1 et 2 sont suivies séparément
   if (!audio.running.value) audio.start()
 }
 // Échap en plein écran : le navigateur quitte le plein écran, on quitte aussi le jeu
@@ -260,13 +262,13 @@ function placeNote(midi, forcedPosition, legato) {
   return note
 }
 
-function registerNote(midi, forcedPosition = null, legato = false, slide = null) {
+function registerNote(midi, forcedPosition = null, legato = false, slide = null, { player = null, skipCombo = false, bend = null } = {}) {
   const note = placeNote(midi, forcedPosition, legato)
   if (!note) return
   const position = note.position
 
   const info = overlay.value.get(pitchClass(midi)) ?? null
-  const events = overlay.value.size ? combo.play({ midi, ...position, info, legato, slide, interval: (pitchClass(midi) - root.value + 12) % 12 }) : []
+  const events = overlay.value.size && !skipCombo ? combo.play({ midi, ...position, info, legato, slide, bend, interval: (pitchClass(midi) - root.value + 12) % 12 }) : []
   const glide = events.some((e) => e.type === 'glide') // note de passage d'un slide : pas une erreur
 
   history.value.unshift({
@@ -278,7 +280,7 @@ function registerNote(midi, forcedPosition = null, legato = false, slide = null)
     outside: overlay.value.size > 0 && !info && !glide,
   })
   note.item = history.value[0]
-  played.value = { id: historyId, midi, ...position, glide }
+  played.value = { id: historyId, midi, ...position, glide, player }
   if (history.value.length > 24) history.value.length = 24
 }
 
@@ -297,9 +299,14 @@ function slidePosition(slide) {
 const audio = useAudioInput({
   onNote: (n) => {
     clearTimeout(clearTimer)
-    const forced = n.slide ? slidePosition(n.slide) : null
+    // Un bend se joue sur la même case : la note atteinte reste affichée là où on a attaqué
+    const forced = n.slide ? slidePosition(n.slide) : n.bend && played.value ? { string: played.value.string, fret: played.value.fret } : null
     const fromFret = played.value?.fret
-    registerNote(n.midi, forced, n.legato, n.slide)
+    // Jam à deux guitares : la note va au jeu (avec son joueur), pas au combo solo
+    const jam = gameOpen.value && gameRef.value?.jamActive
+    registerNote(n.midi, forced, n.legato, n.slide, { player: n.player ?? null, skipCombo: jam, bend: n.bend })
+    // Le jeu à deux tient un combo par joueur : il reçoit la note complète (legato, slide, bend, position)
+    if (jam && n.player !== undefined) gameRef.value.jamNote({ ...n, string: played.value?.string, fret: played.value?.fret })
     if (n.slide && played.value) {
       const to = played.value
       slideTrail.value = { id: ++slideId, string: to.string, fromFret: forced ? fromFret : Math.min(frets.value, Math.max(0, to.fret - (n.slide.to - n.slide.from))), toFret: to.fret }
@@ -367,6 +374,7 @@ function toggleAudio() {
     :played="played"
     :spotify="spotifyRef?.sp ?? null"
     :listening="audio.running.value"
+    :levels="audio.levels.value"
     @update:root="root = $event"
     @update:scale-id="(scaleId = $event), (overlayType = 'scale')"
     @start="onGameStart"
@@ -389,6 +397,7 @@ function toggleAudio() {
           :heat="combo.state.value.mult - 1"
           :broke-at="combo.brokeAt.value"
           :slide="slideTrail"
+          :played-color="played?.player === 1 ? '#38bdf8' : null"
           bare
           @play="onFretClick"
         />

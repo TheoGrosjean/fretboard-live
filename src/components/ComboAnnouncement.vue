@@ -10,6 +10,7 @@ const TONES = {
   fire: 'fire-text',
   warn: 'text-amber-300',
   danger: 'text-rose-400',
+  sky: 'text-sky-300', // joueur 2 du mode Jam
 }
 </script>
 
@@ -262,6 +263,42 @@ const TONES = {
 }
 
 /* Grand slide : le mot file dans le sens du glissé, penché, avec des traînées de vitesse */
+/* Bend : les lettres montent comme la hauteur d'une corde tirée, puis vibrent */
+.fx-bend .word {
+  font-style: italic;
+  color: #fff;
+  text-shadow: 0 0.06em 0.3em color-mix(in srgb, var(--color-copper-500) 60%, transparent);
+}
+.fx-bend .ch {
+  display: inline-block;
+  animation:
+    bend-up 0.5s cubic-bezier(0.3, 0, 0.2, 1) calc(var(--i) * 0.05s) both,
+    bend-vibrato 0.16s ease-in-out calc(0.55s + var(--i) * 0.05s) 5 alternate;
+}
+@keyframes bend-up {
+  from {
+    transform: translateY(0.35em);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(calc(var(--i) * -0.1em)) rotate(-3deg);
+    opacity: 1;
+  }
+}
+@keyframes bend-vibrato {
+  from {
+    transform: translateY(calc(var(--i) * -0.1em)) rotate(-3deg);
+  }
+  to {
+    transform: translateY(calc(var(--i) * -0.1em - 0.05em)) rotate(-3deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fx-bend .ch {
+    animation: none;
+  }
+}
+
 .fx-slide-up .word,
 .fx-slide-down .word {
   font-style: italic;

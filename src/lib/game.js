@@ -2,14 +2,14 @@
  * Mode jeu (plein écran) : modes de partie, cibles du mode « Cible », rangs et records.
  * Tout repose sur la note jouée (hauteur), jamais sur la corde / case exactes, peu fiables à la détection.
  */
-import { createTrackSession, rankFor } from './finisher.js'
-import { feelingFor } from './feelings.js'
+import { createTrackSession, rankFor, styleFor } from './finisher.js'
 
 export const MODES = [
   { id: 'libre', name: 'Libre', desc: 'Partie sans fin : enchaîne les combos, arrête quand tu veux.' },
   { id: 'chrono', name: 'Contre la montre', desc: 'Le meilleur score possible avant la fin du chrono.' },
   { id: 'morceau', name: 'Morceau', desc: 'Joue sur la backing track Spotify, du début à la fin.' },
   { id: 'cible', name: 'Cible', desc: 'Le jeu annonce un degré : trouve-le vite, n’importe où sur le manche.' },
+  { id: 'jam', name: 'Jam ping-pong', desc: 'À deux guitares (entrées 1 et 2) : chacun son tour, renvoyez-vous la balle.' },
 ]
 export const CHRONO_DURATIONS = [60, 120] // s
 
@@ -78,7 +78,6 @@ export function gameResult(session, { mode, title, subtitle, record }) {
     : session.notes ? Math.round((session.hits / session.notes) * 100) : 0
   const bestCombo = cible ? session.bestStreak : session.bestCombo
   const rank = cible ? targetRank(accuracy, bestCombo) : rankFor(accuracy, bestCombo)
-  const favourite = Object.entries(session.feelings).sort((a, b) => b[1] - a[1])[0]
   return {
     rank,
     word: WORDS[rank],
@@ -88,7 +87,7 @@ export function gameResult(session, { mode, title, subtitle, record }) {
     bestCombo,
     accuracy,
     newRecord: session.score > 0 && session.score > record,
-    style: favourite ? feelingFor(Number(favourite[0])).word : '—', // sensation de fin de phrase la plus jouée
+    style: styleFor(session.feelings),
     count: cible ? `${session.targetHits}/${session.targets}` : String(session.notes),
   }
 }

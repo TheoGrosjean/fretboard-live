@@ -9,8 +9,8 @@
 
 export const PRESETS = {
   clean: { gain: 1.5, bass: 5.5, mid: 5, treble: 6.5, presence: 6, master: 7.5, reverb: 3.5, delay: 2, gate: 2 },
-  crunch: { gain: 5, bass: 5.5, mid: 6.5, treble: 6, presence: 5.5, master: 5.5, reverb: 2, delay: 0, gate: 3 },
-  lead: { gain: 8, bass: 5, mid: 7, treble: 6, presence: 6, master: 5, reverb: 3, delay: 3.5, gate: 4 },
+  crunch: { gain: 6, bass: 5, mid: 7, treble: 6.5, presence: 6.5, master: 7, reverb: 2, delay: 0, gate: 3 },
+  lead: { gain: 8, bass: 5, mid: 7, treble: 6, presence: 6.5, master: 6.5, reverb: 3, delay: 3.5, gate: 4 },
 }
 export const DEFAULT_PRESET = 'crunch'
 

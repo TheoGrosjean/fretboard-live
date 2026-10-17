@@ -15,6 +15,8 @@
  *    est une note de passage — ni erreur, ni comptée dans la précision
  *  - grand slide (au moins 5 cases d'un coup, sans attaque) : bonus et annonce « SLIDE » ; s'il arrive
  *    hors gamme, c'est une note de passage
+ *  - bend (montée continue de ½ à 1 ton ½, sans attaque) : arrivé sur une note de la gamme, bonus et annonce
+ *    « BEND » ; le relâchement (retour vers la note de départ) et un bend hors gamme sont des notes de passage
  */
 
 export const TIERS = [0, 10, 25, 50] // combo nécessaire pour ×1, ×2, ×3, ×4
@@ -28,7 +30,7 @@ export const GLIDE_SEMITONES = 2 // écart maximal d'une note de passage avec la
 export const SLIDE_MIN_SEMITONES = 5 // écart minimal d'un grand slide
 const SLIDE_COVERAGE = 0.6 // part des demi-tons intermédiaires qu'on doit avoir entendus pendant le glissé
 
-const POINTS = { note: 10, explore: 5, fullScale: 100, resolution: 50, slide: 20 }
+const POINTS = { note: 10, explore: 5, fullScale: 100, resolution: 50, slide: 20, bend: 25 }
 
 /**
  * Grand slide : arrivée sans attaque à au moins SLIDE_MIN_SEMITONES, en passant par une bonne partie
@@ -71,6 +73,7 @@ export function createRun() {
     positions: new Set(), // positions déjà jouées (exploration)
     degrees: new Set(), // degrés joués pendant le combo en cours
     fullScale: false,
+    bendFrom: null, // note de départ du dernier bend récompensé (un bend lent n'est compté qu'une fois)
   }
 }
 
@@ -89,14 +92,26 @@ function breakCombo(run, reason) {
  * note : { midi, string, fret, info, legato, interval, slide } — info = degré dans la gamme, ou null si hors gamme ;
  *        legato = la note est arrivée sans nouvelle attaque (slide, bend, hammer-on…) ;
  *        slide = { from, to } (midi) si la note termine un grand slide ;
+ *        bend = { from, to, steps, continued } si la note est atteinte en bendant (voir useAudioInput) ;
  *        interval = écart avec la tonique (0–11), même hors gamme
  * scaleSize : nombre de notes de la gamme (pour « gamme complète »)
  */
-export function playNote(run, { midi, string, fret, info, legato = false, interval = null, slide = null }, scaleSize, now) {
+export function playNote(run, { midi, string, fret, info, legato = false, interval = null, slide = null, bend = null }, scaleSize, now) {
   const prevMidi = run.prevMidi
   run.prevMidi = midi
   run.lastAt = now
   const slideEvent = slide && { type: 'slide', span: Math.abs(slide.to - slide.from), up: slide.to > slide.from }
+
+  // Relâchement d'un bend, ou bend qui n'arrive pas dans la gamme : note de passage
+  if (bend && (bend.steps < 0 || !info)) return [{ type: 'glide' }]
+  // Bend qui monte encore (bend lent) : on met à jour l'annonce, sans recompter la note
+  if (bend?.continued && run.bendFrom === bend.from) {
+    run.lastInterval = interval ?? info.interval
+    run.lastWasRoot = info.isRoot
+    return [{ type: 'glide' }, { type: 'bend', steps: bend.steps, continued: true }]
+  }
+  const bendEvent = bend && { type: 'bend', steps: bend.steps, continued: false }
+  run.bendFrom = bend ? bend.from : null
 
   if (!info && legato && prevMidi !== null && (slide || Math.abs(midi - prevMidi) <= GLIDE_SEMITONES)) {
     return slideEvent ? [{ type: 'glide' }, slideEvent] : [{ type: 'glide' }]
@@ -147,6 +162,10 @@ export function playNote(run, { midi, string, fret, info, legato = false, interv
   if (slideEvent) {
     points += POINTS.slide
     events.push(slideEvent)
+  }
+  if (bendEvent) {
+    points += POINTS.bend
+    events.push(bendEvent)
   }
 
   run.score += points * mult

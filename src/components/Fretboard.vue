@@ -21,6 +21,7 @@ const props = defineProps({
   brokeAt: { type: Number, default: 0 }, // change quand le combo casse -> secousse
   slide: { type: Object, default: null }, // { id, string, fromFret, toFret } : traînée lumineuse d'un grand slide
   bare: { type: Boolean, default: false }, // sans cadre ni halo (mode jeu : la scène autour s'en charge)
+  playedColor: { type: String, default: null }, // couleur de la note jouée (joueur 2 du mode Jam)
 })
 const emit = defineEmits(['play'])
 
@@ -488,7 +489,7 @@ const isWound = (s) => s >= 3
         <rect :x="c.x - NOTE_SIZE / 2 - 6" :y="c.y - SPACING / 2" :width="NOTE_SIZE + 12" :height="SPACING" fill="transparent" />
 
         <!-- Note jouée : pastille agrandie et remplie -->
-        <NoteMark v-if="isPlayed(c)" :x="c.x" :y="c.y" :text="playedLabel(c.midi, c.info)" v-bind="playedMark(colors, { outside: playedOutside })" />
+        <NoteMark v-if="isPlayed(c)" :x="c.x" :y="c.y" :text="playedLabel(c.midi, c.info)" v-bind="{ ...playedMark(colors, { outside: playedOutside }), ...(playedColor && !playedOutside ? { fill: playedColor } : {}) }" />
 
         <!-- Autres positions possibles de la note jouée -->
         <NoteMark v-else-if="isAlternate(c)" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="alternateMark(colors, { outside: playedOutside })" />
