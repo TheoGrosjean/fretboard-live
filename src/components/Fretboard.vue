@@ -9,7 +9,7 @@ const props = defineProps({
   frets: { type: Number, default: 22 },
   overlay: { type: Map, required: true },
   notation: { type: String, default: 'en' },
-  labelMode: { type: String, default: 'note' }, // 'note' | 'degree'
+  labelMode: { type: String, default: 'note' }, // 'note' | 'degree' | 'none' (mode jeu difficile)
   played: { type: Object, default: null }, // { midi, string, fret }
   alternates: { type: Array, default: () => [] },
   anchor: { type: Object, default: null },
@@ -20,6 +20,7 @@ const props = defineProps({
   heat: { type: Number, default: 0 }, // 0–3 : intensité du halo selon le multiplicateur de combo
   brokeAt: { type: Number, default: 0 }, // change quand le combo casse -> secousse
   slide: { type: Object, default: null }, // { id, string, fromFret, toFret } : traînée lumineuse d'un grand slide
+  bare: { type: Boolean, default: false }, // sans cadre ni halo (mode jeu : la scène autour s'en charge)
 })
 const emit = defineEmits(['play'])
 
@@ -89,9 +90,12 @@ const playedInfo = computed(() => (props.played ? props.overlay.get(pitchClass(p
 const playedOutside = computed(() => props.played && props.overlay.size > 0 && !playedInfo.value && !props.played.glide)
 
 function label(midi, info) {
+  if (props.labelMode === 'none') return ''
   if (props.labelMode === 'degree' && info) return info.degree
   return noteName(midi, props.notation)
 }
+// La note jouée reste nommée, même quand les autres sont masquées
+const playedLabel = (midi, info) => (props.labelMode === 'none' ? noteName(midi, props.notation) : label(midi, info))
 
 const colors = computed(() => accentPalette(findPalette(props.palette), props.bodyFinish))
 const bodyColor = computed(() => findBodyFinish(props.bodyFinish).color)
@@ -199,7 +203,12 @@ const isWound = (s) => s >= 3
 </script>
 
 <template>
-  <div class="overflow-x-auto overscroll-x-contain rounded-2xl bg-neutral-950 p-4 ring-1 ring-white/5 transition-shadow duration-500" :class="[GLOW[heat], { shake: shaking }]">
+  <div
+    :class="[
+      bare ? 'overflow-visible' : ['overflow-x-auto overscroll-x-contain rounded-2xl bg-neutral-950 p-4 ring-1 ring-white/5 transition-shadow duration-500', GLOW[heat]],
+      { shake: shaking },
+    ]"
+  >
     <svg :viewBox="`0 0 ${WIDTH} ${height}`" class="w-full min-w-225 select-none" role="img" aria-label="Manche de guitare">
       <defs>
         <!-- Ébène : presque noir, légèrement chaud -->
@@ -479,7 +488,7 @@ const isWound = (s) => s >= 3
         <rect :x="c.x - NOTE_SIZE / 2 - 6" :y="c.y - SPACING / 2" :width="NOTE_SIZE + 12" :height="SPACING" fill="transparent" />
 
         <!-- Note jouée : pastille agrandie et remplie -->
-        <NoteMark v-if="isPlayed(c)" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="playedMark(colors, { outside: playedOutside })" />
+        <NoteMark v-if="isPlayed(c)" :x="c.x" :y="c.y" :text="playedLabel(c.midi, c.info)" v-bind="playedMark(colors, { outside: playedOutside })" />
 
         <!-- Autres positions possibles de la note jouée -->
         <NoteMark v-else-if="isAlternate(c)" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="alternateMark(colors, { outside: playedOutside })" />

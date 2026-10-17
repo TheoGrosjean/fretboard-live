@@ -1,6 +1,6 @@
 <script setup>
 // Onglet « Ampli » (phase de test) : la guitare passe dans un mini simulateur d'ampli, en direct
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Knob from './components/amp/Knob.vue'
 import PowerSwitch from './components/amp/PowerSwitch.vue'
 import Pedal from './components/amp/Pedal.vue'
@@ -8,6 +8,7 @@ import Icon from './components/Icon.vue'
 import PageTabs from './components/PageTabs.vue'
 import { DEFAULT_PRESET, PRESETS, createAmp } from './lib/ampChain'
 import { DEFAULT_BODY_FINISH, applyAccent } from './lib/noteStyles'
+import { ampOn } from './lib/ampStatus'
 
 // Même couleur d'accent que la guitare choisie sur le manche
 function stored(key, initial) {
@@ -77,6 +78,7 @@ const outputId = ref(localStorage.getItem('fb.amp.output') || '')
 const canPickOutput = typeof AudioContext !== 'undefined' && 'setSinkId' in AudioContext.prototype
 
 const running = ref(false)
+watch(running, (on) => (ampOn.value = on))
 const error = ref('')
 const latency = ref(null)
 const inLevel = ref(0)
@@ -211,6 +213,8 @@ onMounted(() => {
   addEventListener('resize', fitToScreen)
   document.fonts?.ready.then(fitToScreen)
 })
+// Retour sur l'onglet : la page était en mémoire (l'ampli a continué de jouer), on réajuste l'échelle
+onActivated(fitToScreen)
 onBeforeUnmount(() => {
   stop()
   removeEventListener('resize', fitToScreen)
@@ -667,14 +671,32 @@ onBeforeUnmount(() => {
 }
 
 /* ---------- Pédalier ---------- */
+/* Pédalier façon Pedaltrain : cadre alu anodisé, rails recouverts de velcro séparés par des fentes */
 .board {
+  position: relative;
   padding: 20px;
   border-radius: 18px;
   background:
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.35) 0 2px, transparent 2px 14px),
-    linear-gradient(#2a2826, #1c1b1a);
+    /* grain du velcro */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='v'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.3' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 -0.35'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23v)' opacity='0.16'/%3E%3C/svg%3E"),
+    /* rails : arête du haut éclairée, bas dans l'ombre, puis fente noire */
+    repeating-linear-gradient(
+      180deg,
+      #2c2a28 0 1px,
+      #1d1c1b 1px 6px,
+      #171615 6px 40px,
+      #0f0e0d 40px 43px,
+      #020202 43px 46px,
+      #050505 46px 52px
+    )
+    0 46px / 100% 100%,
+    #1a1918;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    /* cadre */
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 0 0 7px #121110,
+    inset 0 0 0 8px rgba(255, 255, 255, 0.04),
+    inset 0 0 24px 4px rgba(0, 0, 0, 0.75),
     0 20px 40px -20px rgba(0, 0, 0, 0.8);
 }
 .pedal {

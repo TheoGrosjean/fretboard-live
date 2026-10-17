@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, ref, shallowRef, watch } from 'vue'
 import Fretboard from './components/Fretboard.vue'
 import Tuner from './components/Tuner.vue'
 import ComboPanel from './components/ComboPanel.vue'
@@ -10,6 +10,7 @@ import Icon from './components/Icon.vue'
 import PageTabs from './components/PageTabs.vue'
 import SpotifyPlayer from './components/SpotifyPlayer.vue'
 import LoaderNeck from './components/loaders/LoaderNeck.vue'
+import GameMode from './components/game/GameMode.vue'
 import { useAudioInput } from './composables/useAudioInput'
 import { useCombo } from './composables/useCombo'
 import {
@@ -125,7 +126,10 @@ let trackSession = null
 const finisher = shallowRef(null)
 
 const combo = useCombo({
-  onEvent: (e) => trackSession && recordEvent(trackSession, e),
+  onEvent: (e) => {
+    if (trackSession) recordEvent(trackSession, e)
+    gameRef.value?.record(e)
+  },
   scaleKey: computed(() => (pattern.value ? `${overlayType.value}:${root.value}:${pattern.value.id}` : 'none')),
   scaleSize: computed(() => overlay.value.size),
 })
@@ -143,6 +147,12 @@ function onTrackStart(track) {
 }
 
 function onTrackEnd(ended) {
+  // En mode jeu, c'est le jeu qui affiche la fin de partie
+  if (gameOpen.value) {
+    delete trackSessions[ended.uri]
+    gameRef.value?.trackEnded(ended)
+    return
+  }
   const session = trackSessions[ended.uri]
   delete trackSessions[ended.uri]
   if (session === trackSession) trackSession = null
@@ -158,10 +168,49 @@ function onTrackEnd(ended) {
   finisher.value = { ...result, id: Date.now() }
 }
 
-// Échap ferme le finisher
-const onKeydown = (e) => e.key === 'Escape' && (finisher.value = null)
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+// ---------- Mode jeu (plein écran) ----------
+const gameOpen = ref(false)
+const gameRef = ref(null)
+const spotifyRef = ref(null)
+
+function openGame() {
+  if (!pattern.value) {
+    overlayType.value = 'scale' // le jeu se joue sur une gamme
+  }
+  finisher.value = null
+  gameOpen.value = true
+  document.documentElement.requestFullscreen?.().catch(() => {})
+}
+function closeGame() {
+  gameOpen.value = false
+  if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+}
+function onGameStart() {
+  combo.reset()
+  history.value = []
+  if (!audio.running.value) audio.start()
+}
+// Échap en plein écran : le navigateur quitte le plein écran, on quitte aussi le jeu
+const onFullscreenChange = () => !document.fullscreenElement && gameOpen.value && closeGame()
+
+// Échap ferme le finisher ou le jeu ; F lance le mode jeu
+function onKeydown(e) {
+  if (e.key === 'Escape') {
+    if (gameOpen.value) closeGame()
+    else finisher.value = null
+  } else if ((e.key === 'f' || e.key === 'F') && !gameOpen.value && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.closest?.('input, select, textarea')) {
+    openGame()
+  }
+}
+// La page reste en mémoire quand on passe sur l'Ampli : ses raccourcis ne valent que lorsqu'elle est affichée
+function listen(on) {
+  const method = on ? 'addEventListener' : 'removeEventListener'
+  window[method]('keydown', onKeydown)
+  document[method]('fullscreenchange', onFullscreenChange)
+}
+onActivated(() => listen(true))
+onDeactivated(() => listen(false))
+onBeforeUnmount(() => listen(false))
 
 // ---------- Notes jouées ----------
 const played = shallowRef(null) // { midi, string, fret }
@@ -298,6 +347,57 @@ function toggleAudio() {
   <div v-if="finisher" class="fixed inset-0 z-50">
     <FinisherFight :key="finisher.id" :result="finisher" @close="finisher = null" />
   </div>
+
+  <!-- Mode jeu plein écran, par-dessus la page (l'écoute et le lecteur Spotify continuent dessous) -->
+  <GameMode
+    v-if="gameOpen"
+    ref="gameRef"
+    :scale-title="overlayTitle"
+    :scale-key="pattern ? `${overlayType}:${root}:${pattern.id}` : 'none'"
+    :overlay="overlay"
+    :note-names="NOTE_NAMES[notation]"
+    :root="root"
+    :scale-id="scaleId"
+    :scales="SCALES"
+    :state="combo.state.value"
+    :floater="combo.floater.value"
+    :last-note-at="combo.lastNoteAt.value"
+    :decay-ms="combo.decayMs"
+    :broke-at="combo.brokeAt.value"
+    :played="played"
+    :spotify="spotifyRef?.sp ?? null"
+    :listening="audio.running.value"
+    @update:root="root = $event"
+    @update:scale-id="(scaleId = $event), (overlayType = 'scale')"
+    @start="onGameStart"
+    @close="closeGame"
+  >
+    <template #board="{ hard }">
+      <div class="relative">
+        <Fretboard
+          :tuning="tuning"
+          :frets="frets"
+          :overlay="overlay"
+          :notation="notation"
+          :label-mode="hard ? 'none' : labelMode"
+          :body-finish="bodyFinish"
+          :match-head="matchHead"
+          :played="played"
+          :alternates="hard ? [] : alternates"
+          :anchor="anchor"
+          :focus="activeBox?.keys ?? null"
+          :heat="combo.state.value.mult - 1"
+          :broke-at="combo.brokeAt.value"
+          :slide="slideTrail"
+          bare
+          @play="onFretClick"
+        />
+      </div>
+    </template>
+    <template #announce>
+      <ComboAnnouncement :announcement="combo.announcement.value" />
+    </template>
+  </GameMode>
 
   <!-- Animation de chargement : le manche se dessine, puis on plonge dans l'app -->
   <div v-if="splash" class="fixed inset-0 z-50">
@@ -573,7 +673,13 @@ function toggleAudio() {
         <button v-if="drawer" class="-ml-1 rounded-lg p-2 text-neutral-400 hover:bg-white/5 hover:text-neutral-200" title="Réglages" @click="sidebarOpen = true">
           <Icon name="menu" class="size-6" />
         </button>
-        <PageTabs current="manche" class="ml-auto" />
+        <!-- Entrée du mode jeu, bien en vue -->
+        <button class="play-cta ml-auto" title="Mode jeu plein écran (touche F)" @click="openGame">
+          <Icon name="play" class="size-4" />
+          JOUER
+          <kbd>F</kbd>
+        </button>
+        <PageTabs current="manche" />
       </div>
 
       <!-- En-tête : gamme courante + note jouée -->
@@ -659,7 +765,7 @@ function toggleAudio() {
 
       <!-- Accordeur + historique -->
       <div class="mt-4 grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-2 xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
-        <SpotifyPlayer :suggestion="backingSuggestion" @track-change="onTrackChange" @track-start="onTrackStart" @track-end="onTrackEnd" />
+        <SpotifyPlayer ref="spotifyRef" :suggestion="backingSuggestion" @track-change="onTrackChange" @track-start="onTrackStart" @track-end="onTrackEnd" />
         <div class="flex min-h-0 flex-col gap-4">
           <ComboPanel
             :state="combo.state.value"
@@ -708,6 +814,44 @@ function toggleAudio() {
 }
 .segmented > button.is-active {
   @apply bg-neutral-200 text-neutral-950;
+}
+.play-cta {
+  @apply relative flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm sm:gap-2 sm:px-5 font-black tracking-wider text-white italic transition hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0;
+  background: linear-gradient(180deg, var(--color-copper-400), var(--color-copper-600));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 3px 0 color-mix(in srgb, var(--color-copper-600) 60%, #000),
+    0 8px 28px -4px color-mix(in srgb, var(--color-copper-500) 75%, transparent);
+}
+/* Halo qui pulse doucement pour attirer l'œil */
+.play-cta::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px var(--color-copper-400);
+  opacity: 0;
+  animation: cta-pulse 2.4s ease-out infinite;
+  pointer-events: none;
+}
+.play-cta kbd {
+  @apply hidden rounded bg-black/25 px-1.5 text-[10px] font-bold not-italic sm:inline;
+}
+@keyframes cta-pulse {
+  0% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.18, 1.35);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .play-cta::after {
+    animation: none;
+  }
 }
 .rail-btn {
   @apply flex size-11 items-center justify-center rounded-xl text-neutral-400 transition hover:bg-white/5 hover:text-neutral-100;

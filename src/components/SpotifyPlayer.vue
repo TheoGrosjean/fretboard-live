@@ -11,6 +11,8 @@ const props = defineProps({
 const emit = defineEmits(['track-change', 'track-start', 'track-end'])
 
 const sp = useSpotify()
+// Contrôles du lecteur, pour le mode jeu « Morceau »
+defineExpose({ sp })
 
 // Adapter la gamme du manche au morceau lancé (tonalité lue dans le titre)
 const followKey = ref(localStorage.getItem('fb.spotify.followKey') !== 'false')

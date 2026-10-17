@@ -15,13 +15,13 @@ const knobAngle = (v) => -135 + (v / 10) * 270
 const screws = [
   [9, 9],
   [111, 9],
-  [9, 187],
-  [111, 187],
+  [9, 219],
+  [111, 219],
 ]
 </script>
 
 <template>
-  <svg class="pedal-svg" :class="{ active }" viewBox="-10 -4 140 212" :style="{ '--body': props.body, '--ink': props.ink }" aria-hidden="true">
+  <svg class="pedal-svg" :class="{ active }" viewBox="-10 -4 140 244" :style="{ '--body': props.body, '--ink': props.ink }" aria-hidden="true">
     <defs>
       <linearGradient id="pd-bevel" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#fff" stop-opacity="0.45" />
@@ -67,7 +67,7 @@ const screws = [
     </defs>
 
     <!-- Ombre portée sur le pédalier -->
-    <rect x="4" y="10" width="120" height="196" rx="12" fill="#000" opacity="0.65" filter="url(#pd-blur)" />
+    <rect x="4" y="10" width="120" height="228" rx="12" fill="#000" opacity="0.65" filter="url(#pd-blur)" />
 
     <!-- Jacks entrée / sortie sur les côtés -->
     <g v-for="x in [-8, 120]" :key="x">
@@ -76,12 +76,12 @@ const screws = [
     </g>
 
     <!-- Boîtier -->
-    <rect x="0" y="0" width="120" height="196" rx="11" class="body" />
-    <rect x="0" y="0" width="120" height="196" rx="11" fill="#fff" opacity="0.07" filter="url(#pd-hammer)" />
-    <rect x="0" y="0" width="120" height="196" rx="11" fill="url(#pd-light)" />
-    <rect x="0" y="0" width="120" height="196" rx="11" fill="url(#pd-bevel)" />
-    <rect x="0.6" y="0.6" width="118.8" height="194.8" rx="10.5" fill="none" stroke="#fff" stroke-opacity="0.25" stroke-width="1" />
-    <rect x="5" y="5" width="110" height="186" rx="7" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1" />
+    <rect x="0" y="0" width="120" height="228" rx="11" class="body" />
+    <rect x="0" y="0" width="120" height="228" rx="11" fill="#fff" opacity="0.07" filter="url(#pd-hammer)" />
+    <rect x="0" y="0" width="120" height="228" rx="11" fill="url(#pd-light)" />
+    <rect x="0" y="0" width="120" height="228" rx="11" fill="url(#pd-bevel)" />
+    <rect x="0.6" y="0.6" width="118.8" height="226.8" rx="10.5" fill="none" stroke="#fff" stroke-opacity="0.25" stroke-width="1" />
+    <rect x="5" y="5" width="110" height="218" rx="7" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1" />
 
     <!-- Vis -->
     <g v-for="[x, y] in screws" :key="x + '-' + y">
@@ -109,25 +109,25 @@ const screws = [
     </g>
 
     <!-- LED -->
-    <circle cx="60" cy="63" r="5.2" fill="url(#pd-chrome)" stroke="#000" stroke-opacity="0.4" stroke-width="0.5" />
-    <circle cx="60" cy="63" r="3.4" :fill="active ? 'url(#pd-led-on)' : '#3a0909'" />
-    <circle v-if="active" cx="60" cy="63" r="9" fill="#ff3b3b" opacity="0.35" filter="url(#pd-blur-s)" />
+    <circle cx="60" cy="68" r="5.2" fill="url(#pd-chrome)" stroke="#000" stroke-opacity="0.4" stroke-width="0.5" />
+    <circle cx="60" cy="68" r="3.4" :fill="active ? 'url(#pd-led-on)' : '#3a0909'" />
+    <circle v-if="active" cx="60" cy="68" r="9" fill="#ff3b3b" opacity="0.35" filter="url(#pd-blur-s)" />
 
     <!-- Nom -->
-    <text v-if="type === 'script'" x="60" y="101" class="name script" text-anchor="middle">{{ name }}</text>
-    <text v-else x="60" y="98" class="name block" text-anchor="middle">{{ name }}</text>
-    <text x="60" y="114" class="silk sub" text-anchor="middle">{{ sub }}</text>
-    <line x1="30" y1="122" x2="90" y2="122" stroke="var(--ink)" stroke-opacity="0.35" stroke-width="0.8" />
+    <text v-if="type === 'script'" x="60" y="113" class="name script" text-anchor="middle">{{ name }}</text>
+    <text v-else x="60" y="110" class="name block" text-anchor="middle">{{ name }}</text>
+    <text x="60" y="126" class="silk sub" text-anchor="middle">{{ sub }}</text>
+    <line x1="30" y1="134" x2="90" y2="134" stroke="var(--ink)" stroke-opacity="0.35" stroke-width="0.8" />
 
     <!-- Footswitch : écrou hexagonal + bouton bombé qui s'enfonce -->
-    <circle cx="61.5" cy="160" r="17" fill="#000" opacity="0.45" filter="url(#pd-blur-s)" />
-    <polygon points="60,141 75.6,150 75.6,168 60,177 44.4,168 44.4,150" fill="url(#pd-chrome)" stroke="#1e293b" stroke-width="0.8" />
+    <circle cx="61.5" cy="186" r="17" fill="#000" opacity="0.45" filter="url(#pd-blur-s)" />
+    <polygon points="60,167 75.6,176 75.6,194 60,203 44.4,194 44.4,176" fill="url(#pd-chrome)" stroke="#1e293b" stroke-width="0.8" />
     <g class="stomp">
-      <circle cx="62" cy="161.5" r="11" fill="#000" opacity="0.5" filter="url(#pd-blur-s)" />
-      <circle cx="60" cy="159" r="11" fill="url(#pd-dome)" stroke="#1e293b" stroke-width="0.7" />
-      <ellipse cx="56" cy="154.5" rx="4.5" ry="2.6" transform="rotate(-30 56 154.5)" fill="#fff" opacity="0.7" />
+      <circle cx="62" cy="187.5" r="11" fill="#000" opacity="0.5" filter="url(#pd-blur-s)" />
+      <circle cx="60" cy="185" r="11" fill="url(#pd-dome)" stroke="#1e293b" stroke-width="0.7" />
+      <ellipse cx="56" cy="180.5" rx="4.5" ry="2.6" transform="rotate(-30 56 180.5)" fill="#fff" opacity="0.7" />
     </g>
-    <text x="60" y="189" class="silk tiny" text-anchor="middle">FRETBOARD FX</text>
+    <text x="60" y="221" class="silk tiny" text-anchor="middle">FRETBOARD FX</text>
   </svg>
 </template>
 
@@ -179,6 +179,6 @@ const screws = [
 }
 .active .stomp {
   transform: translateY(1.5px) scale(0.98);
-  transform-origin: 60px 159px;
+  transform-origin: 60px 185px;
 }
 </style>

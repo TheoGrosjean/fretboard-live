@@ -26,8 +26,8 @@ export function scaleMark(info, label, palette) {
     strokeWidth: info.isRoot ? 2.5 : 1.5,
     textColor: '#fafaf9',
     fontSize: 13,
-    // En mode « degrés », le nom affiché est déjà le degré : pas de seconde ligne
-    sub: info.degree === label ? '' : info.degree,
+    // En mode « degrés », le nom affiché est déjà le degré : pas de seconde ligne ; mode jeu difficile : rien
+    sub: !label || info.degree === label ? '' : info.degree,
     subColor: info.isRoot ? palette.root : palette.sub,
   }
 }

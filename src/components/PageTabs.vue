@@ -1,6 +1,7 @@
 <script setup>
 // Sélecteur d'onglets Manche / Ampli, au même endroit (en haut à droite) sur les deux pages
 import Icon from './Icon.vue'
+import { ampOn } from '../lib/ampStatus'
 
 const props = defineProps({ current: { type: String, required: true } }) // 'manche' | 'ampli'
 
@@ -34,6 +35,24 @@ const TABS = [
       <Icon :name="t.icon" class="size-4" />
       {{ t.label }}
       <span v-if="t.badge" class="text-[10px] font-bold uppercase" :class="t.id === current ? 'text-copper-600' : 'text-copper-400'">{{ t.badge }}</span>
+      <!-- Voyant : l'ampli virtuel est allumé (il continue de jouer sur les autres onglets) -->
+      <span v-if="t.id === 'ampli' && ampOn" class="amp-led" title="Ampli allumé" />
     </a>
   </nav>
 </template>
+
+<style scoped>
+.amp-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-copper-400);
+  box-shadow: 0 0 8px 2px color-mix(in srgb, var(--color-copper-400) 70%, transparent);
+  animation: led 1.6s ease-in-out infinite;
+}
+@keyframes led {
+  50% {
+    opacity: 0.55;
+  }
+}
+</style>
