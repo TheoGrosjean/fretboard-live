@@ -24,6 +24,7 @@ import {
 import { PLAYER_COLORS, PLAYER_NAMES, RELAYS, TURN_COUNTS, VARIANTS, createJam, jamNote as playJamNote, jamResult, jamTick, passTurn, turnLeft } from '../../lib/jam'
 import { formatScore } from '../finishers/useCountUp'
 import ComboAnnouncement from '../ComboAnnouncement.vue'
+import SpotifyPicker from './SpotifyPicker.vue'
 import FinisherFight from '../finishers/FinisherFight.vue'
 import Icon from '../Icon.vue'
 import { ampOn } from '../../lib/ampStatus'
@@ -45,6 +46,7 @@ const props = defineProps({
   spotify: { type: Object, default: null }, // contrôles du lecteur Spotify (voir useSpotify), si connecté
   listening: { type: Boolean, default: false },
   levels: { type: Array, default: () => [0, 0] }, // niveaux des entrées 1 et 2 (mode Jam)
+  suggestion: { type: String, default: 'guitar backing track' }, // recherche Spotify proposée selon la gamme
 })
 const emit = defineEmits(['close', 'start', 'update:root', 'update:scaleId'])
 
@@ -68,9 +70,19 @@ const jamTurns = ref(stored('jamTurns', 4))
 const SETTINGS = { mode, duration, hard, jamVariant, jamRelay, jamTurns }
 watch(Object.values(SETTINGS), () => Object.entries(SETTINGS).forEach(([k, r]) => localStorage.setItem(`fb.game.${k}`, JSON.stringify(r.value))))
 
-const track = computed(() => props.spotify?.track.value ?? null)
-const modeAvailable = (id) => id !== 'morceau' || Boolean(track.value)
-watch(track, () => !modeAvailable(mode.value) && (mode.value = 'libre'), { immediate: true })
+const track = computed(() => props.spotify?.track.value ?? null) // morceau en cours sur le lecteur
+// Mode Morceau : il suffit d'être connecté à Spotify, le morceau se choisit dans le menu
+const spotifyOn = computed(() => Boolean(props.spotify?.loggedIn.value))
+const modeAvailable = (id) => id !== 'morceau' || spotifyOn.value
+const pickedTrack = ref(null) // { uri, name, artists, image }
+const picking = ref(false)
+// Par défaut : le morceau déjà chargé dans le lecteur du Manche
+const song = computed(() => pickedTrack.value ?? (track.value && { uri: track.value.uri, name: track.value.name, artists: track.value.artists, image: track.value.image }))
+function pickTrack(t) {
+  pickedTrack.value = t
+  picking.value = false
+  mode.value = 'morceau'
+}
 const modeInfo = computed(() => MODES.find((m) => m.id === mode.value))
 const recordFor = (id) => getRecord(recordKey(id, duration.value, props.scaleKey))
 
@@ -90,6 +102,11 @@ const isJam = computed(() => mode.value === 'jam')
 
 function start() {
   if (!modeAvailable(mode.value)) return
+  if (mode.value === 'morceau') {
+    if (!song.value) return void (picking.value = true)
+    // Lancé pendant le clic (le navigateur l'exige) : le morceau démarre avec le compte à rebours
+    props.spotify.play({ uri: song.value.uri })
+  }
   clearTimers()
   emit('start', { duo: isJam.value }) // le mode Jam écoute les deux entrées séparément
   record.value = recordFor(mode.value)
@@ -112,10 +129,6 @@ function begin() {
     jamRuns.value = [createRun(), createRun()]
     jamRuns.value[0].lastAt = performance.now()
     announceTurn(0, [])
-  }
-  if (mode.value === 'morceau' && props.spotify) {
-    props.spotify.seek(0)
-    if (props.spotify.paused.value) props.spotify.togglePlay()
   }
 }
 
@@ -352,7 +365,7 @@ watch(
 
 // ---------- Clavier ----------
 function onKey(e) {
-  if (e.target.closest?.('input, select, textarea')) return
+  if (picking.value || e.target.closest?.('input, select, textarea')) return
   if ((phase.value === 'menu' || phase.value === 'recap' || phase.value === 'jam-over') && e.key === 'Enter') start()
 }
 addEventListener('keydown', onKey)
@@ -415,9 +428,19 @@ onBeforeUnmount(() => {
             <span v-if="recordFor(m.id)" class="text-[11px] font-semibold text-copper-300 tabular-nums">record {{ formatScore(recordFor(m.id)) }}</span>
           </div>
           <p class="mt-1 text-sm text-neutral-400">{{ m.desc }}</p>
-          <p v-if="m.id === 'morceau'" class="mt-2 truncate text-xs" :class="track ? 'text-[#1DB954]' : 'text-neutral-500'">
-            {{ track ? `♪ ${track.name} · ${track.artists}` : 'Lance d’abord un morceau dans le lecteur Spotify du Manche.' }}
-          </p>
+          <!-- Morceau : choix dans Spotify -->
+          <div v-if="m.id === 'morceau'" class="mt-3" @click.stop>
+            <p v-if="!spotify?.isConfigured" class="text-xs text-neutral-500">Spotify n'est pas configuré sur ce site.</p>
+            <button v-else-if="!spotifyOn" class="chip on !bg-[#1DB954]" @click="spotify.login()">Se connecter à Spotify</button>
+            <div v-else class="flex items-center gap-3">
+              <img v-if="song?.image" :src="song.image" alt="" class="size-10 rounded" />
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm font-semibold" :class="song ? 'text-white' : 'text-neutral-500'">{{ song ? song.name : 'Aucun morceau choisi' }}</div>
+                <div v-if="song" class="truncate text-xs text-neutral-400">{{ song.artists }}</div>
+              </div>
+              <button class="chip on !bg-[#1DB954]" @click="picking = true">{{ song ? 'Changer' : 'Choisir un morceau' }}</button>
+            </div>
+          </div>
           <div v-if="m.id === 'chrono'" class="mt-3 flex gap-2" @click.stop>
             <button v-for="d in CHRONO_DURATIONS" :key="d" class="chip" :class="{ on: duration === d }" @click="(duration = d), (mode = 'chrono')">{{ d < 60 ? `${d} s` : `${d / 60} min` }}</button>
           </div>
@@ -449,6 +472,9 @@ onBeforeUnmount(() => {
         <p v-else class="text-xs text-neutral-500"><kbd class="rounded bg-white/10 px-1.5">Entrée</kbd> pour lancer</p>
       </div>
     </div>
+
+    <!-- Choix du morceau (mode Morceau) -->
+    <SpotifyPicker v-if="picking && phase === 'menu' && spotify" :sp="spotify" :suggestion="suggestion" @pick="pickTrack" @close="picking = false" />
 
     <!-- ========== Partie (et compte à rebours par-dessus) ========== -->
     <template v-else-if="phase === 'countdown' || phase === 'playing'">

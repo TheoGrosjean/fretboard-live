@@ -375,6 +375,7 @@ function toggleAudio() {
     :spotify="spotifyRef?.sp ?? null"
     :listening="audio.running.value"
     :levels="audio.levels.value"
+    :suggestion="backingSuggestion"
     @update:root="root = $event"
     @update:scale-id="(scaleId = $event), (overlayType = 'scale')"
     @start="onGameStart"
