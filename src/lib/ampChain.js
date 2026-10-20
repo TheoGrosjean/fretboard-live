@@ -1,8 +1,12 @@
 /**
  * Mini simulateur d'ampli guitare en Web Audio.
  *
- * entrée → noise gate → préampli (filtres + saturation à lampe) → égaliseur Bass / Mid / Treble / Presence
- *        → baffle 4×12 simulé → master → limiteur → sortie, avec reverb et delay en parallèle après le master.
+ * entrée → noise gate → préampli (filtres + deux triodes) → égaliseur Bass / Mid / Treble / Presence
+ *        → étage de puissance (sag) → baffle (réponse impulsionnelle, voir lib/cabinets.js) → master → limiteur → sortie,
+ *        avec reverb et delay en parallèle après le master.
+ *
+ * Les lampes sont calculées dans un AudioWorklet (voir lib/ampWorklet.js) ; sans AudioWorklet, une simple
+ * courbe de saturation prend le relais.
  *
  * Tous les réglages vont de 0 à 10, comme sur un vrai ampli (5 = neutre pour l'égaliseur).
  */
@@ -14,6 +18,9 @@ export const PRESETS = {
 }
 export const DEFAULT_PRESET = 'crunch'
 
+import { DEFAULT_CABINET, cabinetImpulse } from './cabinets.js'
+import workletUrl from './ampWorklet.js?url'
+
 const DRIVE_HEADROOM = 8 // la courbe de saturation couvre ±8 : le signal y entre divisé d'autant
 const DELAY_TIME = 0.38 // s
 const DELAY_FEEDBACK = 0.35
@@ -21,6 +28,28 @@ const DELAY_FEEDBACK = 0.35
 const dbToGain = (db) => 10 ** (db / 20)
 /** Réglage 0–10 → gain en dB d'un étage d'égaliseur (5 = 0 dB). */
 const eqDb = (v, range = 12) => ((v - 5) / 5) * range
+
+const SAG = 0.3 // affaissement de l'alimentation de l'étage de puissance
+const POWER_DRIVE = 0.6 // l'étage de puissance ne sature que sur les attaques fortes
+const TUBES_MAKEUP_DB = 4 // les lampes (filtres internes, sag) sortent un peu moins fort que la simple courbe
+
+/** Charge les lampes (une fois par contexte audio) ; false si le navigateur ne sait pas faire. */
+const worklets = new WeakMap()
+function loadWorklet(ctx) {
+  if (!worklets.has(ctx))
+    worklets.set(
+      ctx,
+      ctx.audioWorklet
+        ? ctx.audioWorklet.addModule(workletUrl).then(
+            () => true,
+            () => false,
+          )
+        : Promise.resolve(false),
+    )
+  return worklets.get(ctx)
+}
+
+const tubeNode = (ctx, name) => new AudioWorkletNode(ctx, name, { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit' })
 
 /** Saturation douce et légèrement asymétrique (harmoniques paires, comme une lampe). */
 function tubeCurve(samples = 4096) {
@@ -76,22 +105,26 @@ function chain(...nodes) {
 
 /**
  * Construit l'ampli à partir d'un nœud d'entrée (mono, guitare).
- * Renvoie { set(params), inputLevel(), outputLevel(), gateOpen(), destroy() }.
+ * Renvoie (promesse) { set(params), setCabinet(buffer), inputLevel(), outputLevel(), gateOpen(), destroy() }.
  */
-export function createAmp(ctx, input) {
+export async function createAmp(ctx, input) {
+  const tubes = await loadWorklet(ctx)
+
   // --- Noise gate (gain piloté par le niveau d'entrée)
   const gate = ctx.createGain()
   const inputMeter = ctx.createAnalyser()
   inputMeter.fftSize = 512
 
   // --- Préampli
-  const tight = biquad(ctx, 'highpass', 100) // graves resserrés avant la saturation
+  const tight = biquad(ctx, 'highpass', 85) // graves resserrés avant la saturation
   const push = biquad(ctx, 'peaking', 750, { Q: 0.8, gain: 5 }) // bosse dans les médiums, façon crunch
   const preLow = biquad(ctx, 'lowpass', 7500)
-  const drive = ctx.createGain()
-  const shaper = ctx.createWaveShaper()
-  shaper.curve = tubeCurve()
-  shaper.oversample = '4x'
+  // Deux triodes (worklet) ou, à défaut, gain + courbe de saturation
+  const preamp = tubes ? [tubeNode(ctx, 'tube-preamp')] : [ctx.createGain(), ctx.createWaveShaper()]
+  if (!tubes) {
+    preamp[1].curve = tubeCurve()
+    preamp[1].oversample = '4x'
+  }
   const dcBlock = biquad(ctx, 'highpass', 25) // l'asymétrie crée une composante continue
   const makeup = ctx.createGain()
 
@@ -100,13 +133,23 @@ export function createAmp(ctx, input) {
   const mid = biquad(ctx, 'peaking', 700, { Q: 0.7 })
   const treble = biquad(ctx, 'highshelf', 2800)
   const presence = biquad(ctx, 'peaking', 4200, { Q: 1 })
+  // Résonance de l'étage de puissance (« depth ») : du punch dans le grave, comme un vrai ampli à lampes
+  const depth = biquad(ctx, 'peaking', 110, { Q: 0.9, gain: 3 })
+  const power = tubes ? tubeNode(ctx, 'tube-power') : ctx.createGain()
 
-  // --- Baffle 4×12 : coupe les extrêmes, résonance grave et pic de présence du haut-parleur
-  const cabLow = biquad(ctx, 'highpass', 75)
-  const cabThump = biquad(ctx, 'peaking', 110, { Q: 1.2, gain: 3 })
-  const cabHonk = biquad(ctx, 'peaking', 2400, { Q: 1.2, gain: 3 })
-  const cabHigh1 = biquad(ctx, 'lowpass', 5200)
-  const cabHigh2 = biquad(ctx, 'lowpass', 5200)
+  // --- Baffle : deux convolueurs en fondu enchaîné, pour changer de baffle / de micro sans clic
+  const cabIn = ctx.createGain()
+  const cabOut = ctx.createGain()
+  const cabs = [0, 1].map(() => {
+    const conv = ctx.createConvolver()
+    conv.normalize = false // les réponses impulsionnelles sont déjà mises à niveau
+    const gain = ctx.createGain()
+    cabIn.connect(conv).connect(gain).connect(cabOut)
+    return { conv, gain }
+  })
+  let activeCab = 0
+  cabs[0].conv.buffer = cabinetImpulse(ctx, DEFAULT_CABINET)
+  cabs[1].gain.gain.value = 0
 
   const master = ctx.createGain()
 
@@ -135,7 +178,8 @@ export function createAmp(ctx, input) {
   outputMeter.fftSize = 512
 
   input.connect(inputMeter)
-  const amp = chain(input, gate, tight, push, preLow, drive, shaper, dcBlock, makeup, bass, mid, treble, presence, cabLow, cabThump, cabHonk, cabHigh1, cabHigh2, master)
+  chain(input, gate, tight, push, preLow, ...preamp, dcBlock, makeup, bass, mid, treble, presence, depth, power, cabIn)
+  const amp = chain(cabOut, master)
   amp.connect(bus)
   chain(amp, delay, delayTone, feedback, delay)
   chain(delayTone, delayWet, bus)
@@ -143,7 +187,7 @@ export function createAmp(ctx, input) {
   chain(bus, limiter, safety, ctx.destination)
   safety.connect(outputMeter)
 
-  const nodes = [gate, tight, push, preLow, drive, shaper, dcBlock, makeup, bass, mid, treble, presence, cabLow, cabThump, cabHonk, cabHigh1, cabHigh2, master, delay, feedback, delayTone, delayWet, reverb, reverbWet, bus, limiter, safety, inputMeter, outputMeter]
+  const nodes = [gate, tight, push, preLow, ...preamp, dcBlock, makeup, bass, mid, treble, presence, depth, power, cabIn, cabOut, ...cabs.flatMap((c) => [c.conv, c.gain]), master, delay, feedback, delayTone, delayWet, reverb, reverbWet, bus, limiter, safety, inputMeter, outputMeter]
 
   let params = { ...PRESETS[DEFAULT_PRESET] }
   const smooth = (param, value) => param.setTargetAtTime(value, ctx.currentTime, 0.02)
@@ -152,8 +196,15 @@ export function createAmp(ctx, input) {
     params = { ...params, ...next }
     const p = params
     const preDb = 6 + p.gain * 3.6 // 6 dB (clean) → 42 dB (lead)
-    smooth(drive.gain, dbToGain(preDb) / DRIVE_HEADROOM)
-    smooth(makeup.gain, dbToGain(-p.gain * 0.6)) // garde un volume à peu près constant quand on monte le gain
+    if (tubes) {
+      // Le gain se répartit entre les deux triodes : en clean, seule la 1re travaille un peu
+      const v1Db = 8 + p.gain * 1.6
+      const t = (n) => preamp[0].parameters.get(n)
+      smooth(t('gain1'), dbToGain(v1Db))
+      smooth(t('gain2'), dbToGain(preDb - v1Db))
+      smooth(t('tight'), 30 + p.gain * 10) // plus de gain, grave plus serré entre les triodes (sinon ça bave)
+    } else smooth(preamp[0].gain, dbToGain(preDb) / DRIVE_HEADROOM)
+    smooth(makeup.gain, dbToGain(-p.gain * 0.6 + (tubes ? TUBES_MAKEUP_DB : 0))) // garde un volume à peu près constant quand on monte le gain
     smooth(bass.gain, eqDb(p.bass))
     smooth(mid.gain, eqDb(p.mid))
     smooth(treble.gain, eqDb(p.treble))
@@ -163,6 +214,10 @@ export function createAmp(ctx, input) {
     smooth(delayWet.gain, (p.delay / 10) ** 1.5 * 0.8)
   }
   set(params)
+  if (tubes) {
+    power.parameters.get('drive').value = POWER_DRIVE
+    power.parameters.get('sag').value = SAG
+  }
 
   // --- Noise gate : ouverture rapide, fermeture douce, avec hystérésis et maintien
   const buf = new Float32Array(inputMeter.fftSize)
@@ -187,8 +242,19 @@ export function createAmp(ctx, input) {
     }
   }, 8)
 
+  /** Nouveau baffle (AudioBuffer de réponse impulsionnelle) : fondu enchaîné de 50 ms. */
+  function setCabinet(buffer) {
+    const next = 1 - activeCab
+    cabs[next].conv.buffer = buffer
+    const t = ctx.currentTime
+    cabs[next].gain.gain.setTargetAtTime(1, t, 0.015)
+    cabs[activeCab].gain.gain.setTargetAtTime(0, t, 0.015)
+    activeCab = next
+  }
+
   return {
     set,
+    setCabinet,
     inputLevel: () => inputDb,
     outputLevel: () => rmsDb(outputMeter),
     gateOpen: () => open,

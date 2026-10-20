@@ -7,6 +7,7 @@ import Pedal from './components/amp/Pedal.vue'
 import Icon from './components/Icon.vue'
 import PageTabs from './components/PageTabs.vue'
 import { DEFAULT_PRESET, PRESETS, createAmp } from './lib/ampChain'
+import { CABINETS, DEFAULT_CABINET, DEFAULT_MIC, cabinetImpulse, loadImpulse, responseCurve } from './lib/cabinets'
 import { DEFAULT_BODY_FINISH, applyAccent } from './lib/noteStyles'
 import { ampOn } from './lib/ampStatus'
 
@@ -85,6 +86,64 @@ const inLevel = ref(0)
 const outLevel = ref(0)
 const gateOpen = ref(false)
 
+// ---------- Baffle : modèle synthétique (+ micro) ou réponse impulsionnelle chargée (.wav) ----------
+const cabinet = ref(stored('fb.amp.cab', DEFAULT_CABINET)) // id de CABINETS, ou 'custom'
+const mic = ref({ ...DEFAULT_MIC, ...stored('fb.amp.mic', {}) })
+const customIr = ref(stored('fb.amp.customIr', null)) // { name, data (data URL) }
+const cabError = ref('')
+watch(cabinet, (c) => localStorage.setItem('fb.amp.cab', JSON.stringify(c)))
+watch(mic, (m) => localStorage.setItem('fb.amp.mic', JSON.stringify(m)), { deep: true })
+
+/** Réponse impulsionnelle du baffle choisi, pour le contexte audio de l'ampli. */
+async function cabinetBuffer() {
+  if (cabinet.value === 'custom' && customIr.value) {
+    const data = await (await fetch(customIr.value.data)).arrayBuffer()
+    return loadImpulse(ctx, data)
+  }
+  return cabinetImpulse(ctx, cabinet.value === 'custom' ? DEFAULT_CABINET : cabinet.value, mic.value)
+}
+async function applyCabinet() {
+  if (!amp || !ctx) return
+  try {
+    amp.setCabinet(await cabinetBuffer())
+    cabError.value = ''
+  } catch (e) {
+    cabError.value = `Baffle illisible : ${e.message}`
+  }
+}
+let micTimer = 0
+watch(cabinet, applyCabinet)
+watch(mic, () => (clearTimeout(micTimer), (micTimer = setTimeout(applyCabinet, 80))), { deep: true })
+
+// Mini-courbe de réponse du baffle (60 Hz → 12 kHz)
+const curvePath = computed(() => {
+  if (cabinet.value === 'custom') return ''
+  const pts = responseCurve(cabinet.value, mic.value, 60)
+  const y = (db) => Math.min(50, Math.max(2, 18 - db * 0.85))
+  return pts.map((p, i) => `${i ? 'L' : 'M'}${((i / (pts.length - 1)) * 160).toFixed(1)},${y(p.db).toFixed(1)}`).join(' ')
+})
+
+/** Fichier .wav de réponse impulsionnelle choisi par l'utilisateur (gardé dans le navigateur s'il est petit). */
+async function onIrFile(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  const data = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+  customIr.value = { name: file.name.replace(/\.wav$/i, ''), data }
+  try {
+    localStorage.setItem('fb.amp.customIr', JSON.stringify(customIr.value))
+  } catch {
+    cabError.value = 'Fichier trop gros pour être mémorisé : il faudra le recharger la prochaine fois.'
+  }
+  if (cabinet.value === 'custom') applyCabinet()
+  else cabinet.value = 'custom'
+}
+
 let ctx = null
 let stream = null
 let amp = null
@@ -141,8 +200,9 @@ async function start() {
       source.connect(splitter)
       splitter.connect(mono, Number(channel.value))
     }
-    amp = createAmp(ctx, mono)
+    amp = await createAmp(ctx, mono)
     amp.set(params.value)
+    await applyCabinet()
     running.value = true
     latency.value = Math.round(((ctx.baseLatency || 0) + (ctx.outputLatency || 0)) * 1000)
     tick()
@@ -274,6 +334,64 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="feet" aria-hidden="true"><span /><span /></div>
+      </section>
+
+      <!-- ========== Baffle ========== -->
+      <section class="cab-strip">
+        <div class="flex w-full shrink-0 items-center justify-between gap-4 sm:w-auto sm:flex-col sm:items-start sm:justify-center">
+          <h2 class="text-xs font-semibold tracking-widest text-neutral-500 uppercase">Baffle</h2>
+          <svg v-if="curvePath" viewBox="0 0 160 52" class="h-[52px] w-40 sm:mt-2" aria-label="Réponse en fréquence du baffle">
+            <line x1="0" x2="160" y1="18" y2="18" stroke="#ffffff14" />
+            <path :d="curvePath" fill="none" stroke="var(--color-copper-400)" stroke-width="1.6" />
+          </svg>
+        </div>
+
+        <div class="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex-1 sm:grid-cols-4">
+          <button v-for="c in CABINETS" :key="c.id" class="cab-card" :class="{ on: cabinet === c.id }" @click="cabinet = c.id">
+            <!-- Façade du baffle : un rond par haut-parleur -->
+            <svg viewBox="0 0 64 44" class="h-8 w-12 shrink-0" aria-hidden="true">
+              <rect x="1" y="1" width="62" height="42" rx="4" fill="#0d0c0b" stroke="#2a2725" />
+              <rect x="5" y="5" width="54" height="34" rx="2" class="cloth" />
+              <circle
+                v-for="(p, i) in { '1x12': [[32, 22, 12]], '2x12': [[19, 22, 10], [45, 22, 10]], '4x12': [[19, 14, 7], [45, 14, 7], [19, 30, 7], [45, 30, 7]] }[c.id]"
+                :key="i"
+                :cx="p[0]"
+                :cy="p[1]"
+                :r="p[2]"
+                fill="#00000055"
+                stroke="#00000088"
+              />
+            </svg>
+            <span class="min-w-0 text-center">
+              <span class="block truncate text-xs font-bold text-neutral-100">{{ c.name }}</span>
+              <span class="block truncate text-[10px] text-neutral-500">{{ c.sub }}</span>
+            </span>
+          </button>
+          <!-- Réponse impulsionnelle chargée -->
+          <label class="cab-card cursor-pointer" :class="{ on: cabinet === 'custom' && customIr }" @click="customIr && cabinet !== 'custom' && ((cabinet = 'custom'), $event.preventDefault())">
+            <input type="file" accept=".wav,audio/wav" class="sr-only" @change="onIrFile" />
+            <span class="flex h-8 w-12 shrink-0 items-center justify-center rounded border border-dashed border-white/20 text-lg text-neutral-500">+</span>
+            <span class="min-w-0 text-center">
+              <span class="block truncate text-xs font-bold text-neutral-100">{{ customIr ? customIr.name : 'Fichier .wav' }}</span>
+              <span class="block truncate text-[10px] text-neutral-500">{{ customIr ? (cabinet === 'custom' ? 'clique pour en changer' : 'ta réponse impulsionnelle') : 'réponse impulsionnelle' }}</span>
+            </span>
+          </label>
+        </div>
+
+        <!-- Micro devant le haut-parleur -->
+        <div class="flex w-full shrink-0 flex-col justify-center gap-2 sm:w-56" :class="{ 'pointer-events-none opacity-40': cabinet === 'custom' }">
+          <label class="mic-row">
+            <span>Centre</span>
+            <input v-model.number="mic.position" type="range" min="0" max="1" step="0.01" aria-label="Position du micro" />
+            <span>Bord</span>
+          </label>
+          <label class="mic-row">
+            <span>Près</span>
+            <input v-model.number="mic.distance" type="range" min="0" max="1" step="0.01" aria-label="Distance du micro" />
+            <span>Loin</span>
+          </label>
+        </div>
+        <p v-if="cabError" class="w-full text-xs text-amber-300">{{ cabError }}</p>
       </section>
 
       <div class="grid gap-6 lg:grid-cols-[1.25fr_1fr]">
@@ -758,6 +876,70 @@ onBeforeUnmount(() => {
   background: #120d08;
   box-shadow: inset 0 0 0 1px #3a2a1a;
   text-shadow: 0 0 6px rgba(251, 191, 119, 0.6);
+}
+
+/* ---------- Baffle ---------- */
+.cab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 16px 20px;
+  padding: 14px 20px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.04) 1px, transparent 1.4px) 0 0 / 4px 4px,
+    linear-gradient(#1d1b19, #141312);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 20px 40px -20px rgba(0, 0, 0, 0.8);
+}
+.cab-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border-radius: 12px;
+  padding: 8px 6px;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.cab-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.cab-card.on {
+  background: color-mix(in srgb, var(--color-copper-500) 12%, transparent);
+  box-shadow:
+    inset 0 0 0 2px var(--color-copper-400),
+    0 8px 24px -10px color-mix(in srgb, var(--color-copper-500) 60%, transparent);
+}
+/* Toile de baffle tressée */
+.cab-card .cloth {
+  fill: #3a3128;
+}
+.cab-card.on .cloth {
+  fill: color-mix(in srgb, var(--color-copper-500) 30%, #3a3128);
+}
+.mic-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 36px;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #a8a29e;
+}
+.mic-row span:last-child {
+  text-align: right;
+}
+.mic-row input {
+  accent-color: var(--color-copper-400);
 }
 
 /* ---------- Branchements ---------- */
