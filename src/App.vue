@@ -7,7 +7,6 @@ import ComboAnnouncement from './components/ComboAnnouncement.vue'
 import FinisherFight from './components/finishers/FinisherFight.vue'
 import { createTrackSession, recordEvent, sessionResult } from './lib/finisher'
 import Icon from './components/Icon.vue'
-import PageTabs from './components/PageTabs.vue'
 import SpotifyPlayer from './components/SpotifyPlayer.vue'
 import LoaderNeck from './components/loaders/LoaderNeck.vue'
 import GameMode from './components/game/GameMode.vue'
@@ -26,6 +25,8 @@ import {
 import { keyFromTitle } from './lib/keyFromTitle'
 import { BODY_FINISHES, DEFAULT_BODY_FINISH, applyAccent } from './lib/noteStyles'
 import { positionKey, scaleBoxes } from './lib/boxes'
+import { CHORDS, chordShapes, scaleChords } from './lib/chords'
+import { practiceRequest } from './lib/practice'
 import { PHRASE_GAP_MS, PHRASE_LENGTH, REVISABLE, bestFingering, handFrom, rootBox } from './lib/fingering'
 
 // ---------- Réglages persistés ----------
@@ -45,10 +46,11 @@ if (drawer.value) sidebarOpen.value = false
 const props = defineProps({ skipSplash: { type: Boolean, default: false } })
 // Animation de chargement au lancement, mais pas en revenant de l'onglet Ampli
 const splash = ref(!props.skipSplash)
-const overlayType = persisted('overlayType', 'scale') // 'scale' | 'arpeggio' | 'none'
+const overlayType = persisted('overlayType', 'scale') // 'scale' | 'arpeggio' | 'chord' | 'none'
 const root = persisted('root', 9) // La
 const scaleId = persisted('scaleId', 'penta-minor')
 const arpeggioId = persisted('arpeggioId', 'm7')
+const chordId = persisted('chordId', 'maj')
 const notation = persisted('notation', 'fr')
 const labelMode = persisted('labelMode', 'note')
 const frets = persisted('frets', 22)
@@ -66,11 +68,42 @@ const tuning = STANDARD_TUNING
 const pattern = computed(() => {
   if (overlayType.value === 'scale') return SCALES.find((s) => s.id === scaleId.value)
   if (overlayType.value === 'arpeggio') return ARPEGGIOS.find((a) => a.id === arpeggioId.value)
+  if (overlayType.value === 'chord') return CHORDS.find((c) => c.id === chordId.value)
   return null
 })
+const isChord = computed(() => overlayType.value === 'chord')
+
+// « Pratiquer sur le manche » depuis un cours de la page Théorie : on règle la gamme / l'accord du cours
+watch(
+  practiceRequest,
+  (r) => {
+    if (!r) return
+    const refs = { overlayType, root, scaleId, arpeggioId, chordId, boxIndex }
+    Object.entries(r).forEach(([k, v]) => refs[k] && (refs[k].value = v))
+    practiceRequest.value = null
+  },
+  { immediate: true },
+)
 const overlay = computed(() => buildOverlay(root.value, pattern.value))
-// Boxes de la gamme courante ; la box choisie restreint l'affichage et la détection de position
-const boxes = computed(() => scaleBoxes(root.value, pattern.value, tuning, frets.value))
+// Boxes de la gamme courante (ou formes CAGED de l'accord) ; la box choisie restreint l'affichage et la détection de position
+const boxes = computed(() => (isChord.value ? chordShapes(root.value, pattern.value, tuning, frets.value) : scaleBoxes(root.value, pattern.value, tuning, frets.value)))
+const boxName = (b) => (isChord.value ? `Forme ${b.name}` : `Box ${b.index + 1}`)
+
+// Accords de la gamme : un clic met les notes de l'accord en avant sur la gamme
+const harmony = computed(() => (overlayType.value === 'scale' ? scaleChords(root.value, pattern.value) : []))
+const harmonyIndex = ref(null)
+const harmonyChord = computed(() => harmony.value[harmonyIndex.value] ?? null)
+watch([root, scaleId, overlayType], () => (harmonyIndex.value = null))
+const chordLabel = (c) => `${NOTE_NAMES[notation.value][c.root]}${c.symbol}`
+/** Ouvre l'accord mis en avant en mode Accord, pour voir ses formes. */
+function showChordShapes(c) {
+  const id = CHORDS.some((x) => x.id === c.id) ? c.id : null
+  if (!id) return
+  overlayType.value = 'chord'
+  chordId.value = id
+  root.value = c.root
+  boxIndex.value = 0
+}
 const activeBox = computed(() => (boxIndex.value ? boxes.value[boxIndex.value - 1] ?? null : null))
 watch(boxes, (b) => {
   if (boxIndex.value > b.length) boxIndex.value = 0
@@ -106,6 +139,9 @@ function onTrackChange(track) {
     if (overlayType.value === 'arpeggio') {
       const current = ARPEGGIOS.find((a) => a.id === arpeggioId.value)
       if (quality(current) !== key.quality) arpeggioId.value = key.quality === 'minor' ? 'm7' : 'maj7'
+    } else if (overlayType.value === 'chord') {
+      const current = CHORDS.find((c) => c.id === chordId.value)
+      if (!current.power && quality(current) !== key.quality) chordId.value = key.quality === 'minor' ? 'min' : 'maj'
     } else {
       const current = SCALES.find((sc) => sc.id === scaleId.value)
       overlayType.value = 'scale'
@@ -115,7 +151,7 @@ function onTrackChange(track) {
   keySync.value = { title: track.name, state: syncState() }
 }
 
-const syncState = () => [overlayType.value, root.value, scaleId.value, arpeggioId.value].join('|')
+const syncState = () => [overlayType.value, root.value, scaleId.value, arpeggioId.value, chordId.value].join('|')
 // L'indication disparaît dès que la gamme est changée à la main
 const keySyncActive = computed(() => keySync.value && keySync.value.state === syncState())
 
@@ -210,8 +246,16 @@ function listen(on) {
   window[method]('keydown', onKeydown)
   document[method]('fullscreenchange', onFullscreenChange)
 }
-onActivated(() => listen(true))
-onDeactivated(() => listen(false))
+// Page affichée : ses boutons vont dans la barre du haut (JOUER, menu des réglages sur mobile)
+const active = ref(false)
+onActivated(() => {
+  listen(true)
+  active.value = true
+})
+onDeactivated(() => {
+  listen(false)
+  active.value = false
+})
 onBeforeUnmount(() => listen(false))
 
 // ---------- Notes jouées ----------
@@ -298,6 +342,8 @@ function slidePosition(slide) {
 
 const audio = useAudioInput({
   onNote: (n) => {
+    // Jam « un seul joueur à la fois » : le joueur qui attend son tour est ignoré (et coupé dans l'ampli)
+    if (gameOpen.value && gameRef.value?.isMuted(n.player)) return
     clearTimeout(clearTimer)
     // Un bend se joue sur la même case : la note atteinte reste affichée là où on a attaqué
     const forced = n.slide ? slidePosition(n.slide) : n.bend && played.value ? { string: played.value.string, fret: played.value.fret } : null
@@ -414,23 +460,21 @@ function toggleAudio() {
     <LoaderNeck @done="splash = false" />
   </div>
 
-  <div class="flex min-h-screen bg-anthracite text-neutral-200 xl:h-screen xl:overflow-hidden">
+  <div class="flex min-h-[calc(100vh-3.5rem)] bg-anthracite text-neutral-200 xl:h-[calc(100vh-3.5rem)] xl:overflow-hidden">
     <!-- Fond assombri derrière le tiroir (mobile) -->
     <div v-if="drawer && sidebarOpen" class="fixed inset-0 z-30 bg-black/60" @click="sidebarOpen = false" />
     <!-- ========== Barre latérale ========== -->
     <aside
-      class="flex h-screen shrink-0 flex-col border-r border-white/5"
+      class="flex shrink-0 flex-col border-r border-white/5"
       :class="
         drawer
-          ? ['fixed inset-y-0 left-0 z-40 w-80 max-w-[85vw] bg-neutral-900 transition-transform duration-200', sidebarOpen ? 'translate-x-0' : '-translate-x-full']
-          : ['sticky top-0 self-start bg-neutral-900/70 backdrop-blur transition-[width] duration-200', sidebarOpen ? 'w-80' : 'w-16']
+          ? ['fixed inset-y-0 left-0 z-40 h-screen w-80 max-w-[85vw] bg-neutral-900 transition-transform duration-200', sidebarOpen ? 'translate-x-0' : '-translate-x-full']
+          : ['sticky top-14 h-[calc(100vh-3.5rem)] self-start bg-neutral-900/70 backdrop-blur transition-[width] duration-200', sidebarOpen ? 'w-80' : 'w-16']
       "
     >
-      <!-- Logo + bouton replier -->
-      <div class="flex h-16 shrink-0 items-center border-b border-white/5" :class="sidebarOpen || drawer ? 'justify-between px-5' : 'justify-center'">
-        <h1 v-if="sidebarOpen || drawer" class="text-lg font-black tracking-tight whitespace-nowrap text-white">
-          Fretboard <span class="text-copper-400">Live</span>
-        </h1>
+      <!-- Titre + bouton replier (le logo est dans la barre du haut) -->
+      <div class="flex h-12 shrink-0 items-center border-b border-white/5" :class="sidebarOpen || drawer ? 'justify-between px-5' : 'justify-center'">
+        <h1 v-if="sidebarOpen || drawer" class="flex items-center gap-2 text-xs font-semibold tracking-widest whitespace-nowrap text-neutral-500 uppercase"><Icon name="sliders" class="size-4" /> Réglages</h1>
         <button
           class="rounded-lg p-2 text-neutral-500 transition hover:bg-white/5 hover:text-neutral-200"
           :title="sidebarOpen ? 'Replier les réglages' : 'Déplier les réglages'"
@@ -456,7 +500,7 @@ function toggleAudio() {
           <div class="absolute bottom-0 w-full rounded-full bg-linear-to-t from-copper-500 via-copper-400 to-rose-500" :style="{ height: audio.level.value * 100 + '%' }" />
         </div>
         <div class="my-2 h-px w-8 bg-white/5" />
-        <button class="rail-btn" title="Gamme / arpège" @click="sidebarOpen = true">
+        <button class="rail-btn" title="Gammes & accords" @click="sidebarOpen = true">
           <span class="text-xs font-bold text-copper-300">{{ pattern ? NOTE_NAMES[notation][root] : '—' }}</span>
         </button>
         <button class="rail-btn" title="Entrée audio" @click="sidebarOpen = true"><Icon name="mic" class="size-5" /></button>
@@ -465,15 +509,16 @@ function toggleAudio() {
 
       <!-- Barre dépliée : réglages -->
       <div v-else class="flex-1 space-y-5 overflow-y-auto px-5 py-5">
-        <!-- Gamme / arpège -->
+        <!-- Gamme / arpège / accord -->
         <section>
-          <h2 class="section-title section-toggle" :class="{ 'is-closed': !openSections.scale }" @click="toggleSection('scale')"><Icon name="music" class="size-4" /> Gamme / arpège <svg class="chevron ml-auto size-4" :class="{ 'rotate-180': openSections.scale }" viewBox="0 0 20 20" fill="currentColor"><path d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4z" /></svg></h2>
+          <h2 class="section-title section-toggle" :class="{ 'is-closed': !openSections.scale }" @click="toggleSection('scale')"><Icon name="music" class="size-4" /> Gammes &amp; accords <svg class="chevron ml-auto size-4" :class="{ 'rotate-180': openSections.scale }" viewBox="0 0 20 20" fill="currentColor"><path d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4z" /></svg></h2>
           <div v-show="openSections.scale" class="space-y-3">
-            <div class="segmented grid-cols-3">
+            <div class="segmented grid-cols-4">
               <button
                 v-for="t in [
                   { id: 'scale', label: 'Gamme' },
                   { id: 'arpeggio', label: 'Arpège' },
+                  { id: 'chord', label: 'Accord' },
                   { id: 'none', label: 'Aucun' },
                 ]"
                 :key="t.id"
@@ -503,10 +548,13 @@ function toggleAudio() {
             <select v-else-if="overlayType === 'arpeggio'" v-model="arpeggioId" class="field" aria-label="Arpège">
               <option v-for="a in ARPEGGIOS" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
+            <select v-else-if="overlayType === 'chord'" v-model="chordId" class="field" aria-label="Accord">
+              <option v-for="c in CHORDS" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
 
-            <!-- Position : tout le manche ou une box -->
+            <!-- Position : tout le manche ou une box (formes CAGED pour un accord) -->
             <div v-if="boxes.length">
-              <span class="field-label">Position</span>
+              <span class="field-label">{{ isChord ? 'Forme' : 'Position' }}</span>
               <div class="grid grid-cols-4 gap-1">
                 <button
                   class="col-span-4 rounded-md py-1.5 text-xs font-semibold transition"
@@ -523,7 +571,7 @@ function toggleAudio() {
                   :title="`Cases ${boxLabel(b)}`"
                   @click="boxIndex = b.index + 1"
                 >
-                  <span class="text-xs font-semibold">Box {{ b.index + 1 }}</span>
+                  <span class="text-xs font-semibold">{{ boxName(b) }}</span>
                   <span class="text-[10px] opacity-70 tabular-nums">{{ b.ranges[0][0] }}–{{ b.ranges[0][1] }}</span>
                 </button>
               </div>
@@ -677,30 +725,31 @@ function toggleAudio() {
     </aside>
 
     <!-- ========== Contenu principal ========== -->
-    <main class="flex min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 sm:py-5 lg:px-8 xl:h-screen">
-      <!-- Onglets Manche / Ampli, au même endroit que sur la page Ampli -->
-      <div class="mb-3 flex shrink-0 items-center gap-3">
-        <button v-if="drawer" class="-ml-1 rounded-lg p-2 text-neutral-400 hover:bg-white/5 hover:text-neutral-200" title="Réglages" @click="sidebarOpen = true">
-          <Icon name="menu" class="size-6" />
-        </button>
-        <!-- Entrée du mode jeu, bien en vue -->
-        <button class="play-cta ml-auto" title="Mode jeu plein écran (touche F)" @click="openGame">
-          <Icon name="play" class="size-4" />
-          JOUER
-          <kbd>F</kbd>
-        </button>
-        <PageTabs current="manche" />
-      </div>
+    <!-- Dans la barre du haut : menu des réglages (mobile) à gauche, entrée du mode jeu à droite, bien en vue -->
+    <Teleport v-if="active && drawer" defer to="#topbar-lead">
+      <button class="rounded-lg p-2 text-neutral-400 hover:bg-white/5 hover:text-neutral-200" title="Réglages" @click="sidebarOpen = true">
+        <Icon name="menu" class="size-6" />
+      </button>
+    </Teleport>
+    <Teleport v-if="active" defer to="#topbar-actions">
+      <button class="play-cta" title="Mode jeu plein écran (touche F)" @click="openGame">
+        <Icon name="play" class="size-4" />
+        JOUER
+        <kbd>F</kbd>
+      </button>
+    </Teleport>
+
+    <main class="flex min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 sm:py-5 lg:px-8 xl:h-[calc(100vh-3.5rem)]">
 
       <!-- En-tête : gamme courante + note jouée -->
       <header class="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div class="min-w-0 flex-1 basis-60">
           <div class="text-[11px] font-semibold tracking-widest text-neutral-500 uppercase">
-            {{ overlayType === 'arpeggio' ? 'Arpège' : overlayType === 'scale' ? 'Gamme' : 'Manche libre' }}
+            {{ overlayType === 'arpeggio' ? 'Arpège' : overlayType === 'scale' ? 'Gamme' : isChord ? 'Accord' : 'Manche libre' }}
           </div>
           <h2 class="text-2xl font-black tracking-tight text-white sm:text-3xl">
             {{ overlayTitle }}
-            <span v-if="activeBox" class="text-copper-400">· Box {{ boxIndex }}</span>
+            <span v-if="activeBox" class="text-copper-400">· {{ boxName(activeBox) }}</span>
           </h2>
           <div v-if="keySyncActive" class="mt-1 flex items-center gap-1.5 text-xs text-neutral-400">
             <span class="size-2 rounded-full bg-[#1DB954]" />
@@ -717,6 +766,11 @@ function toggleAudio() {
               <span class="text-neutral-500">{{ overlay.get((root + i) % 12)?.degree }}</span>
             </span>
           </div>
+        </div>
+
+        <!-- Annonces du combo, au-dessus du manche, à gauche de « Note jouée » (petits écrans : sur le manche) -->
+        <div class="relative hidden h-24 min-w-0 flex-1 basis-72 lg:block">
+          <ComboAnnouncement :announcement="combo.announcement.value" compact />
         </div>
 
         <div class="flex items-center gap-4 rounded-2xl bg-neutral-900 py-3 pr-3 pl-5 ring-1 ring-white/5">
@@ -740,7 +794,6 @@ function toggleAudio() {
       </header>
 
       <!-- Manche -->
-      <!-- Manche, avec les annonces du combo en grand au centre -->
       <div class="relative shrink-0">
         <Fretboard
           :tuning="tuning"
@@ -754,16 +807,51 @@ function toggleAudio() {
           :alternates="alternates"
           :anchor="anchor"
           :focus="activeBox?.keys ?? null"
+          :muted="isChord && activeBox ? activeBox.muted : null"
+          :highlight="harmonyChord"
           :heat="pattern ? combo.state.value.mult - 1 : 0"
           :broke-at="combo.brokeAt.value"
           :slide="slideTrail"
           @play="onFretClick"
         />
-        <ComboAnnouncement :announcement="combo.announcement.value" />
+        <div class="lg:hidden"><ComboAnnouncement :announcement="combo.announcement.value" /></div>
       </div>
-      <div class="mt-3 flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 text-xs text-neutral-500">
+      <!-- Sous le manche : accords de la gamme (la légende passe alors dans un bouton), sinon la légende -->
+      <div v-if="harmony.length" class="mt-3 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-1 text-xs">
+        <span class="font-semibold tracking-widest text-neutral-500 uppercase">Accords de la gamme</span>
+        <div class="flex flex-wrap gap-1.5">
+          <button
+            v-for="(c, i) in harmony"
+            :key="i"
+            class="flex items-baseline gap-1.5 rounded-lg px-2.5 py-1 font-bold ring-1 transition"
+            :class="harmonyIndex === i ? 'bg-copper-500 text-white ring-copper-400' : 'bg-neutral-900 text-neutral-200 ring-white/10 hover:bg-neutral-800'"
+            :title="harmonyIndex === i ? 'Revenir à la gamme' : `Mettre en avant les notes de ${chordLabel(c)}`"
+            @click="harmonyIndex = harmonyIndex === i ? null : i"
+          >
+            <span class="text-sm">{{ chordLabel(c) }}</span>
+            <span class="text-[10px] font-semibold opacity-60">{{ c.roman }}</span>
+          </button>
+        </div>
+        <button v-if="harmonyChord && CHORDS.some((x) => x.id === harmonyChord.id)" class="font-semibold text-copper-300 hover:text-copper-200" @click="showChordShapes(harmonyChord)">
+          Voir les formes de {{ chordLabel(harmonyChord) }} →
+        </button>
+        <div class="group relative ml-auto">
+          <button class="rounded-lg px-2.5 py-1 font-semibold text-neutral-500 ring-1 ring-white/10 hover:text-neutral-300">Légende</button>
+          <div class="pointer-events-none absolute right-0 bottom-full z-20 mb-2 w-64 space-y-2 rounded-xl bg-neutral-900 p-3 text-neutral-400 opacity-0 shadow-xl ring-1 ring-white/10 transition group-focus-within:opacity-100 group-hover:opacity-100">
+            <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-copper-400" /> Tonique</span>
+            <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-stone-900 ring-1 ring-stone-500" /> Gamme</span>
+            <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-stone-50 ring-2 ring-copper-400" /> Note de l'accord choisi</span>
+            <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-copper-500" /> Jouée</span>
+            <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-rose-500" /> Hors gamme</span>
+            <span class="flex items-center gap-1.5"><span class="size-3 rounded-full border-2 border-dashed border-copper-300" /> Même note ailleurs</span>
+            <span class="flex items-center gap-1.5"><span class="h-3 w-5 rounded-sm bg-white/15" /> Position de la main</span>
+            <p class="text-neutral-600">Clique sur une case pour indiquer où se trouve ta main.</p>
+          </div>
+        </div>
+      </div>
+      <div v-else class="mt-3 flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 text-xs text-neutral-500">
         <div class="flex flex-wrap items-center gap-4">
-          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-stone-900 ring-2 ring-copper-400" /> Tonique</span>
+          <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-copper-400" /> Tonique</span>
           <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-stone-900 ring-1 ring-stone-500" /> Gamme</span>
           <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-copper-500" /> Jouée</span>
           <span class="flex items-center gap-1.5"><span class="size-3 rounded-full bg-rose-500" /> Hors gamme</span>

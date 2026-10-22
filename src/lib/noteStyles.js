@@ -21,14 +21,33 @@ export function scaleMark(info, label, palette) {
   return {
     shape: 'circle',
     size: SIZE,
-    fill: '#1c1917',
-    stroke: info.isRoot ? palette.root : '#78716c',
-    strokeWidth: info.isRoot ? 2.5 : 1.5,
-    textColor: '#fafaf9',
+    // Tonique : pastille pleine, à la couleur de la palette (texte foncé pour rester lisible)
+    fill: info.isRoot ? palette.root : '#1c1917',
+    stroke: info.isRoot ? 'none' : '#78716c',
+    strokeWidth: info.isRoot ? 0 : 1.5,
+    textColor: info.isRoot ? '#1c1917' : '#fafaf9',
     fontSize: 13,
     // En mode « degrés », le nom affiché est déjà le degré : pas de seconde ligne ; mode jeu difficile : rien
     sub: !label || info.degree === label ? '' : info.degree,
-    subColor: info.isRoot ? palette.root : palette.sub,
+    subColor: info.isRoot ? 'rgba(28, 25, 23, 0.7)' : palette.sub,
+  }
+}
+
+/**
+ * Note d'un accord mis en avant par-dessus la gamme (accords de la gamme) : tonique de l'accord pleine,
+ * autres notes de l'accord en blanc cerclé. `degree` : degré dans l'accord (1, 3, 5…).
+ */
+export function chordToneMark(isChordRoot, label, degree, palette) {
+  return {
+    shape: 'circle',
+    size: SIZE,
+    fill: isChordRoot ? palette.root : '#fafaf9',
+    stroke: isChordRoot ? 'none' : palette.root,
+    strokeWidth: isChordRoot ? 0 : 2.5,
+    textColor: '#1c1917',
+    fontSize: 13,
+    sub: !label || degree === label ? '' : degree,
+    subColor: 'rgba(28, 25, 23, 0.7)',
   }
 }
 

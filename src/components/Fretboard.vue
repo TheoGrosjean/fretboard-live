@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { noteName, pitchClass } from '../lib/music'
-import { DEFAULT_BODY_FINISH, DEFAULT_PALETTE, accentPalette, alternateMark, findBodyFinish, findPalette, playedMark, scaleMark } from '../lib/noteStyles'
+import { degreeLabel, noteName, pitchClass } from '../lib/music'
+import { DEFAULT_BODY_FINISH, DEFAULT_PALETTE, accentPalette, alternateMark, chordToneMark, findBodyFinish, findPalette, playedMark, scaleMark } from '../lib/noteStyles'
 import NoteMark from './NoteMark.vue'
 
 const props = defineProps({
@@ -17,6 +17,8 @@ const props = defineProps({
   bodyFinish: { type: String, default: DEFAULT_BODY_FINISH }, // couleur unie du corps
   matchHead: { type: Boolean, default: false }, // tête laquée de la couleur du corps
   focus: { type: Set, default: null }, // positions 'corde-case' de la box choisie ; les autres notes sont estompées
+  muted: { type: Array, default: null }, // cordes étouffées de la forme d'accord choisie : croix au sillet
+  highlight: { type: Object, default: null }, // accord mis en avant sur la gamme : { root, intervals }
   heat: { type: Number, default: 0 }, // 0–3 : intensité du halo selon le multiplicateur de combo
   brokeAt: { type: Number, default: 0 }, // change quand le combo casse -> secousse
   slide: { type: Object, default: null }, // { id, string, fromFret, toFret } : traînée lumineuse d'un grand slide
@@ -134,6 +136,17 @@ watch(
     shakeTimer = setTimeout(() => (shaking.value = false), 450)
   },
 )
+
+// Accord mis en avant : ses notes ressortent, le reste de la gamme s'estompe
+const highlightPcs = computed(() => (props.highlight ? new Map(props.highlight.intervals.map((i) => [(props.highlight.root + i) % 12, i])) : null))
+function noteMark(c) {
+  const text = label(c.midi, c.info)
+  const interval = highlightPcs.value?.get(pitchClass(c.midi))
+  if (interval === undefined) return scaleMark(c.info, text, colors.value)
+  const degree = degreeLabel(interval)
+  return chordToneMark(interval === 0, props.labelMode === 'degree' ? '' : text, degree, colors.value)
+}
+const faded = (c) => (props.focus && !props.focus.has(c.key)) || (highlightPcs.value && !highlightPcs.value.has(pitchClass(c.midi)))
 
 const isPlayed = (c) => props.played && props.played.string === c.string && props.played.fret === c.fret
 const isAlternate = (c) => props.alternates.some((a) => a.string === c.string && a.fret === c.fret)
@@ -494,11 +507,16 @@ const isWound = (s) => s >= 3
         <!-- Autres positions possibles de la note jouée -->
         <NoteMark v-else-if="isAlternate(c)" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="alternateMark(colors, { outside: playedOutside })" />
 
-        <!-- Notes de la gamme / arpège -->
-        <NoteMark v-else-if="c.info" class="mark" :class="{ 'opacity-15': focus && !focus.has(c.key) }" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="scaleMark(c.info, label(c.midi, c.info), colors)" />
+        <!-- Notes de la gamme / arpège (et de l'accord mis en avant, même hors pentatonique) -->
+        <NoteMark v-else-if="c.info || highlightPcs?.has(pitchClass(c.midi))" class="mark" :class="{ 'opacity-15': faded(c) && !highlight, 'opacity-30': faded(c) && highlight }" :x="c.x" :y="c.y" :text="label(c.midi, c.info)" v-bind="noteMark(c)" />
 
         <!-- Survol -->
         <circle v-else :cx="c.x" :cy="c.y" :r="NOTE_SIZE / 2 - 3" class="fill-white/0 transition-colors hover:fill-white/15" />
+      </g>
+
+      <!-- Cordes étouffées de la forme d'accord : croix devant le sillet -->
+      <g v-if="muted" class="pointer-events-none">
+        <text v-for="s in muted" :key="s" :x="noteX(0)" :y="fanY(s, noteX(0)) + 7" text-anchor="middle" font-size="22" font-weight="800" fill="#fafaf9" stroke="#0c0a09" stroke-width="5" paint-order="stroke">✕</text>
       </g>
     </svg>
   </div>

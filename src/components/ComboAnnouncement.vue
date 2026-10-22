@@ -1,8 +1,9 @@
 <script setup>
-// Annonces du combo (paliers, combo perdu, sensations de fin de phrase), affichées en grand
-// au centre du manche, en surimpression qui ne bloque pas les clics
+// Annonces du combo (paliers, combo perdu, sensations de fin de phrase), en surimpression qui ne bloque pas
+// les clics : en grand au-dessus du manche (mode jeu), ou en compact dans l'en-tête (compact)
 defineProps({
   announcement: { type: Object, default: null }, // { id, text, tone, sub?, effect? } — voir useCombo
+  compact: { type: Boolean, default: false }, // calé à droite, plus petit : dans l'en-tête, à côté de « Note jouée »
 })
 
 const TONES = {
@@ -15,17 +16,17 @@ const TONES = {
 </script>
 
 <template>
-  <div class="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+  <div class="pointer-events-none absolute inset-0 flex items-center overflow-hidden" :class="compact ? 'compact justify-end' : 'justify-center'">
     <!-- Sensation de fin de phrase : chaque lettre est animée selon l'effet de la sensation -->
     <div v-if="announcement?.effect" :key="announcement.id" class="fx text-center" :class="`fx-${announcement.effect}`">
-      <div class="word text-6xl font-black tracking-tight xl:text-7xl">
+      <div class="word font-black tracking-tight" :class="compact ? 'text-4xl xl:text-5xl' : 'text-6xl xl:text-7xl'">
         <span v-for="(ch, i) in announcement.text" :key="i" class="ch" :style="{ '--i': i }">{{ ch === ' ' ? '\u00a0' : ch }}</span>
       </div>
-      <div class="sub mt-2 text-base font-medium text-neutral-300 xl:text-lg">{{ announcement.sub }}</div>
+      <div class="sub font-medium text-neutral-300" :class="compact ? 'mt-1 text-sm' : 'mt-2 text-base xl:text-lg'">{{ announcement.sub }}</div>
     </div>
     <!-- Autres annonces (paliers, combo perdu…) -->
     <!-- Le texte est dans un enfant : il passe au-dessus du voile (::before), même avec un dégradé -->
-    <div v-else-if="announcement" :key="announcement.id" class="announce text-center text-5xl font-black tracking-tight xl:text-6xl">
+    <div v-else-if="announcement" :key="announcement.id" class="announce text-center font-black tracking-tight" :class="compact ? 'text-4xl xl:text-5xl' : 'text-5xl xl:text-6xl'">
       <span :class="TONES[announcement.tone]">{{ announcement.text }}</span>
     </div>
   </div>
@@ -85,6 +86,12 @@ const TONES = {
     opacity: 0;
     transform: translateY(-10px);
   }
+}
+
+/* En compact, moins de marge : le texte se cale contre le cadre « Note jouée » */
+.compact .announce,
+.compact .fx {
+  padding: 8px 20px;
 }
 
 /* ---------- Sensations de fin de phrase ---------- */

@@ -15,11 +15,11 @@ body {
   background-color: #1e1e1e;
 }
 
-/* Transition entre les onglets Manche / Ampli : fondu de sortie, puis fondu d'entrée après le rechargement */
-.page-leave #app {
+/* Transition entre les onglets : fondu de sortie, puis fondu d'entrée de la page (la barre du haut ne bouge pas) */
+.page-leave .page-view {
   animation: page-leave 0.22s ease-in forwards;
 }
-.page-enter #app {
+.page-enter .page-view {
   animation: page-enter 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 @keyframes page-leave {
@@ -37,8 +37,8 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .page-leave #app,
-  .page-enter #app {
+  .page-leave .page-view,
+  .page-enter .page-view {
     animation: none;
   }
 }

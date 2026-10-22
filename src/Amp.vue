@@ -5,11 +5,10 @@ import Knob from './components/amp/Knob.vue'
 import PowerSwitch from './components/amp/PowerSwitch.vue'
 import Pedal from './components/amp/Pedal.vue'
 import Icon from './components/Icon.vue'
-import PageTabs from './components/PageTabs.vue'
 import { DEFAULT_PRESET, PRESETS, createAmp } from './lib/ampChain'
 import { CABINETS, DEFAULT_CABINET, DEFAULT_MIC, cabinetImpulse, loadImpulse, responseCurve } from './lib/cabinets'
 import { DEFAULT_BODY_FINISH, applyAccent } from './lib/noteStyles'
-import { ampOn } from './lib/ampStatus'
+import { ampOn, soloPlayer } from './lib/ampStatus'
 
 // Même couleur d'accent que la guitare choisie sur le manche
 function stored(key, initial) {
@@ -149,6 +148,7 @@ let stream = null
 let amp = null
 let source = null
 let splitter = null
+let playerGains = [] // gains des entrées 1 et 2 dans le mélange (jam : couper le joueur qui attend)
 let raf = 0
 
 async function refreshDevices() {
@@ -194,7 +194,18 @@ async function start() {
     mono.channelCount = 1
     mono.channelCountMode = 'explicit'
     mono.channelInterpretation = 'speakers'
-    if (channel.value === 'mix') source.connect(mono)
+    const stereo = stream.getAudioTracks()[0]?.getSettings().channelCount !== 1
+    if (channel.value === 'mix' && stereo) {
+      // Mélange des deux entrées, chacune avec son gain : la jam peut couper le joueur qui attend son tour
+      splitter = ctx.createChannelSplitter(2)
+      source.connect(splitter)
+      playerGains = [0, 1].map((i) => {
+        const g = ctx.createGain()
+        g.gain.value = playerGain(i)
+        splitter.connect(g, i).connect(mono)
+        return g
+      })
+    } else if (channel.value === 'mix') source.connect(mono)
     else {
       splitter = ctx.createChannelSplitter(2)
       source.connect(splitter)
@@ -223,6 +234,8 @@ function stop() {
   amp = null
   source?.disconnect()
   splitter?.disconnect()
+  playerGains.forEach((g) => g.disconnect())
+  playerGains = []
   source = splitter = null
   stream?.getTracks().forEach((t) => t.stop())
   stream = null
@@ -242,6 +255,23 @@ function tick() {
 
 const toggle = () => (running.value ? stop() : start())
 
+// Jam « un seul joueur à la fois » : le joueur qui reçoit la main entre tout de suite,
+// celui qui la rend s'éteint en fondu (sa dernière note sonne encore un peu)
+const MIX_GAIN = 0.5 // même niveau que le mélange stéréo → mono
+const FADE_OUT = 0.4 // constante de temps (s) : ~1,5 s pour s'éteindre
+const playerGain = (i) => (soloPlayer.value === null || soloPlayer.value === i ? MIX_GAIN : 0)
+watch(soloPlayer, () => {
+  if (!ctx) return
+  const t = ctx.currentTime
+  playerGains.forEach((g, i) => {
+    const target = playerGain(i)
+    g.gain.cancelScheduledValues(t)
+    g.gain.setValueAtTime(g.gain.value, t)
+    if (target > 0) g.gain.linearRampToValueAtTime(target, t + 0.005) // 5 ms : juste de quoi éviter un clic
+    else g.gain.setTargetAtTime(0, t, FADE_OUT)
+  })
+})
+
 watch([deviceId, channel], () => {
   localStorage.setItem('fb.channel', channel.value)
   if (running.value) start()
@@ -254,17 +284,19 @@ watch(outputId, (id) => {
 // Sur ordinateur, toute la page tient dans l'écran sans défilement : on la réduit juste ce qu'il faut
 const stage = ref(null)
 const mainEl = ref(null)
+const TOPBAR_HEIGHT = 56 // barre du haut (TopBar.vue, h-14)
 function fitToScreen() {
   const el = stage.value
   if (!el) return
   el.style.zoom = ''
   el.style.minHeight = ''
   if (innerWidth < 1024) return
+  const available = innerHeight - TOPBAR_HEIGHT
   const natural = mainEl.value.getBoundingClientRect().bottom - el.getBoundingClientRect().top + parseFloat(getComputedStyle(el).paddingBottom)
-  const scale = Math.max(0.7, Math.min(1, innerHeight / natural))
+  const scale = Math.max(0.7, Math.min(1, available / natural))
   if (scale === 1) return
   el.style.zoom = String(scale)
-  el.style.minHeight = `${innerHeight / scale}px` // le fond couvre toujours tout l'écran
+  el.style.minHeight = `${available / scale}px` // le fond couvre toujours tout l'écran
 }
 
 onMounted(() => {
@@ -282,12 +314,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="stage" class="stage min-h-screen px-4 pt-5 pb-6 text-neutral-200 sm:px-8">
-    <!-- Onglets -->
-    <nav class="relative z-10 mx-auto mb-5 flex max-w-5xl items-center gap-4">
-      <h1 class="text-lg font-black tracking-tight whitespace-nowrap text-white">Fretboard <span class="text-copper-400">Live</span></h1>
-      <PageTabs current="ampli" class="ml-auto" />
-    </nav>
+  <div ref="stage" class="stage min-h-[calc(100vh-3.5rem)] px-4 pt-6 pb-6 text-neutral-200 sm:px-8">
 
     <main ref="mainEl" class="relative z-10 mx-auto max-w-5xl space-y-5">
       <!-- ========== Tête d'ampli ========== -->

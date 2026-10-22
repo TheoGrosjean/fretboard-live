@@ -27,7 +27,7 @@ import ComboAnnouncement from '../ComboAnnouncement.vue'
 import SpotifyPicker from './SpotifyPicker.vue'
 import FinisherFight from '../finishers/FinisherFight.vue'
 import Icon from '../Icon.vue'
-import { ampOn } from '../../lib/ampStatus'
+import { ampOn, soloPlayer } from '../../lib/ampStatus'
 
 const props = defineProps({
   scaleTitle: { type: String, required: true },
@@ -67,7 +67,8 @@ const jamVariant = ref(stored('jamVariant', 'duel'))
 // Relais mémorisé qui n'existe plus (anciens 4 s / 8 s) : 16 s
 const jamRelay = ref(RELAYS.some((r) => r.id === stored('jamRelay', '16')) ? stored('jamRelay', '16') : '16')
 const jamTurns = ref(stored('jamTurns', 4))
-const SETTINGS = { mode, duration, hard, jamVariant, jamRelay, jamTurns }
+const jamSolo = ref(stored('jamSolo', false)) // un seul joueur à la fois : l'autre est coupé dans l'ampli
+const SETTINGS = { mode, duration, hard, jamVariant, jamRelay, jamTurns, jamSolo }
 watch(Object.values(SETTINGS), () => Object.entries(SETTINGS).forEach(([k, r]) => localStorage.setItem(`fb.game.${k}`, JSON.stringify(r.value))))
 
 const track = computed(() => props.spotify?.track.value ?? null) // morceau en cours sur le lecteur
@@ -263,6 +264,12 @@ function jamNote(n) {
 function passJamTurn() {
   if (jam.value) handleJam(passTurn(jam.value, performance.now()))
 }
+// Un seul joueur à la fois : seul le joueur qui a la main passe dans l'ampli, l'autre est coupé (et ignoré)
+const heardPlayer = computed(() => (jamSolo.value && isJam.value && phase.value === 'playing' && jam.value && !jam.value.over ? jam.value.turn : null))
+watch(heardPlayer, (p) => (soloPlayer.value = p), { immediate: true })
+onBeforeUnmount(() => (soloPlayer.value = null))
+const isMuted = (player) => heardPlayer.value !== null && player !== heardPlayer.value
+
 function finishJam() {
   if (phase.value !== 'playing') return
   const outcome = jamResult(jam.value)
@@ -323,6 +330,7 @@ defineExpose({
   record: record_,
   trackEnded,
   jamNote,
+  isMuted,
   active: computed(() => phase.value !== 'menu'),
   // Partie de Jam en cours (ou sur le point de commencer) : les notes vont au jeu à deux, pas au combo
   jamActive: computed(() => isJam.value && phase.value !== 'menu'),
@@ -455,6 +463,11 @@ onBeforeUnmount(() => {
                 <button v-for="t in TURN_COUNTS" :key="t" class="chip" :class="{ on: jamTurns === t }" @click="jamTurns = t">{{ t }} chacun</button>
               </template>
             </div>
+            <label class="mt-3 flex cursor-pointer items-center gap-3 text-xs text-neutral-300 select-none">
+              <input v-model="jamSolo" type="checkbox" class="peer sr-only" />
+              <span class="switch" />
+              <span>Un seul joueur à la fois <span class="text-neutral-500">· celui qui attend est coupé dans l'ampli</span></span>
+            </label>
             <p class="mt-2 text-[11px] text-neutral-500">Guitares sur les entrées 1 et 2 de la Scarlett, en position « Inst ».</p>
           </div>
         </div>
