@@ -33,6 +33,18 @@ function buildBox(intervals, startIndex, root, tuning, nps, baseFret) {
  */
 export function scaleBoxes(root, pattern, tuning, frets) {
   if (!pattern) return []
+  // 7 cordes : les boxes restent celles de la guitare 6 cordes (calées sur le Mi grave, comme on les apprend),
+  // prolongées sur la corde grave par les notes de la gamme dans la même zone de cases
+  if (tuning.length > 6) {
+    const pcs = new Set(pattern.intervals.map((i) => (root + i) % 12))
+    return scaleBoxes(root, pattern, tuning.slice(0, 6), frets).map((box) => {
+      const keys = new Set(box.keys)
+      for (const [lo, hi] of box.ranges)
+        for (let string = 6; string < tuning.length; string++)
+          for (let fret = lo; fret <= hi; fret++) if (pcs.has((((tuning[string] + fret) % 12) + 12) % 12)) keys.add(key({ string, fret }))
+      return { ...box, keys, center: { ...box.center, string: (tuning.length - 1) / 2 } }
+    })
+  }
   const blues = pattern.intervals.includes(6) && pattern.id === 'blues'
   const intervals = [...pattern.intervals].filter((i) => !blues || i !== 6).sort((a, b) => a - b)
   const nps = intervals.length <= 5 ? 2 : 3

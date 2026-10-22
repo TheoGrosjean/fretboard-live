@@ -47,8 +47,8 @@ const TABS = [
         @click="go($event, t)"
       >
         <Icon :name="t.icon" class="size-[18px]" />
-        <!-- Sur téléphone, seul l'onglet courant garde son nom -->
-        <span :class="{ 'max-sm:hidden': t.id !== current }">{{ t.label }}</span>
+        <!-- Sur téléphone, icônes seules (le trait cuivré marque la page courante) -->
+        <span class="max-sm:hidden">{{ t.label }}</span>
         <span v-if="t.badge" class="text-[9px] font-bold tracking-wider text-copper-400 uppercase max-sm:hidden">{{ t.badge }}</span>
         <!-- Voyant : l'ampli virtuel est allumé (il continue de jouer sur les autres onglets) -->
         <span v-if="t.id === 'ampli' && ampOn" class="amp-led" title="Ampli allumé" />

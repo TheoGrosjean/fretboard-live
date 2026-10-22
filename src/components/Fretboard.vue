@@ -444,7 +444,8 @@ const isWound = (s) => s >= 3
           <circle :cx="noteX(m.fret)" :cy="TOP + SPACING * 1.5" r="8" fill="url(#pearl)" />
           <circle :cx="noteX(m.fret)" :cy="neckBottom - SPACING * 1.5" r="8" fill="url(#pearl)" />
         </template>
-        <circle v-else :cx="noteX(m.fret)" :cy="(TOP + neckBottom) / 2" r="8" fill="url(#pearl)" />
+        <!-- Entre deux cordes, même avec un nombre impair de cordes (7 cordes) -->
+        <circle v-else :cx="noteX(m.fret)" :cy="TOP + SPACING * (Math.floor((stringCount - 1) / 2) + 0.5)" r="8" fill="url(#pearl)" />
       </g>
 
       <!-- Sillet et frettes -->

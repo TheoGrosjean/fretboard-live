@@ -117,57 +117,64 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
       </button>
     </div>
 
-    <!-- Connecté -->
-    <template v-else>
-      <!-- Lecture en cours -->
-      <div class="rounded-xl bg-neutral-950/60 p-3 ring-1 ring-white/5">
-        <div class="flex items-center gap-3">
-          <img v-if="sp.track.value?.image" :src="sp.track.value.image" alt="" class="size-14 shrink-0 rounded-md object-cover" />
-          <div v-else class="flex size-14 shrink-0 items-center justify-center rounded-md bg-neutral-800 text-neutral-600">
-            <Icon name="music" class="size-6" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="truncate font-semibold text-neutral-100">{{ sp.track.value?.name ?? (sp.ready.value ? 'Choisis un morceau' : 'Connexion au lecteur…') }}</div>
-            <div class="truncate text-sm text-neutral-500">{{ sp.track.value?.artists ?? '' }}</div>
-          </div>
-          <div class="flex items-center gap-1">
-            <button class="ctrl" title="Précédent" :disabled="!sp.track.value" @click="sp.previous()"><Icon name="previous" class="size-5" /></button>
-            <button
-              class="flex size-11 items-center justify-center rounded-full bg-[#1DB954] text-neutral-950 transition hover:scale-105 disabled:opacity-30"
-              :title="sp.paused.value ? 'Lecture' : 'Pause'"
-              :disabled="!sp.track.value"
-              @click="sp.togglePlay()"
-            >
-              <Icon :name="sp.paused.value ? 'play' : 'pause'" class="size-5" />
-            </button>
-            <button class="ctrl" title="Suivant" :disabled="!sp.track.value" @click="sp.next()"><Icon name="next" class="size-5" /></button>
+    <!-- Connecté : lecteur à gauche, recherche et playlists à droite -->
+    <div v-else class="grid min-h-0 flex-1 gap-5 lg:grid-cols-2">
+      <div class="flex min-h-0 flex-col">
+      <!-- Lecture en cours : pochette, puis titre, progression et commandes (côte à côte si le lecteur est peu haut) -->
+      <div class="player relative min-h-0 flex-1 rounded-xl bg-neutral-950/60 p-4 ring-1 ring-white/5">
+        <!-- Volume : en haut à droite de la carte -->
+        <div class="vol absolute top-3 right-4 z-10 flex items-center gap-2 rounded-full bg-neutral-950/70 py-1 pr-1 pl-2 text-neutral-500 backdrop-blur">
+          <Icon name="volume" class="size-4 shrink-0" />
+          <input type="range" min="0" max="1" step="0.01" :value="sp.volume.value" class="seek w-20" :style="{ '--p': sp.volume.value * 100 + '%' }" aria-label="Volume" @input="sp.setVolume(Number($event.target.value))" />
+        </div>
+        <div class="player-inner flex h-full flex-col gap-4">
+        <div class="cover relative overflow-hidden rounded-lg bg-neutral-800">
+          <template v-if="sp.track.value?.image">
+            <!-- Fond flouté de la pochette, qui remplit la zone quelle que soit sa forme -->
+            <img :src="sp.track.value.image" alt="" class="absolute inset-0 size-full scale-110 object-cover opacity-50 blur-2xl" />
+            <img :src="sp.track.value.image" alt="" class="absolute inset-0 m-auto max-h-full max-w-full rounded-md object-contain shadow-2xl shadow-black/60" />
+          </template>
+          <div v-else class="absolute inset-0 flex items-center justify-center text-neutral-600">
+            <Icon name="music" class="size-10" />
           </div>
         </div>
 
-        <div class="mt-3 flex items-center gap-2 text-[11px] text-neutral-500 tabular-nums">
-          <span class="w-9 text-right">{{ formatTime(sp.position.value) }}</span>
-          <input
-            type="range"
-            min="0"
-            :max="sp.duration.value || 1"
-            :value="sp.position.value"
-            :disabled="!sp.track.value"
-            class="flex-1 accent-[#1DB954]"
-            aria-label="Position"
-            @change="sp.seek(Number($event.target.value))"
-          />
-          <span class="w-9">{{ formatTime(sp.duration.value) }}</span>
-          <Icon name="volume" class="ml-2 size-4 shrink-0" />
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            :value="sp.volume.value"
-            class="w-20 accent-[#1DB954]"
-            aria-label="Volume"
-            @input="sp.setVolume(Number($event.target.value))"
-          />
+        <div class="info flex min-w-0 flex-col justify-center text-center">
+          <div class="t-title truncate text-lg font-bold text-neutral-100">{{ sp.track.value?.name ?? (sp.ready.value ? 'Choisis un morceau' : 'Connexion au lecteur…') }}</div>
+          <div class="t-artist truncate text-sm text-neutral-400">{{ sp.track.value?.artists ?? '' }}</div>
+
+          <!-- Progression : temps écoulé, barre fine, durée -->
+          <div class="prog mt-4 flex items-center gap-3 text-[11px] text-neutral-400 tabular-nums">
+            <span class="w-8 text-right">{{ formatTime(sp.position.value) }}</span>
+            <input
+              type="range"
+              min="0"
+              :max="sp.duration.value || 1"
+              :value="sp.position.value"
+              :disabled="!sp.track.value"
+              class="seek min-w-0 flex-1"
+              :style="{ '--p': ((sp.position.value / (sp.duration.value || 1)) * 100).toFixed(2) + '%' }"
+              aria-label="Position"
+              @change="sp.seek(Number($event.target.value))"
+            />
+            <span class="w-8">{{ formatTime(sp.duration.value) }}</span>
+          </div>
+
+          <div class="ctrls mt-2 flex items-center justify-center">
+            <div class="flex items-center gap-3">
+              <button class="ctrl" title="Précédent" :disabled="!sp.track.value" @click="sp.previous()"><Icon name="previous" class="size-5" /></button>
+              <button
+                class="play-btn flex size-12 items-center justify-center rounded-full bg-white text-neutral-950 shadow-lg shadow-black/40 transition hover:scale-105 disabled:opacity-30"
+                :title="sp.paused.value ? 'Lecture' : 'Pause'"
+                :disabled="!sp.track.value"
+                @click="sp.togglePlay()"
+              >
+                <Icon :name="sp.paused.value ? 'play' : 'pause'" class="size-5" />
+              </button>
+              <button class="ctrl" title="Suivant" :disabled="!sp.track.value" @click="sp.next()"><Icon name="next" class="size-5" /></button>
+            </div>
+          </div>
+        </div>
         </div>
       </div>
 
@@ -175,9 +182,11 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
         <input v-model="followKey" type="checkbox" class="size-4 accent-copper-400" />
         Adapter la gamme au morceau (d'après son titre)
       </label>
+      </div>
 
+      <div class="flex min-h-0 flex-col">
       <!-- Recherche / playlists -->
-      <div class="mt-4 flex items-center gap-2">
+      <div class="flex items-center gap-2">
         <div class="grid grid-cols-2 gap-1 rounded-xl bg-neutral-800 p-1 text-sm">
           <button class="rounded-lg px-3 py-1 font-medium transition" :class="tab === 'search' ? 'bg-neutral-200 text-neutral-950' : 'text-neutral-400 hover:text-neutral-200'" @click="tab = 'search'">
             Recherche
@@ -270,7 +279,8 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
           </li>
         </template>
       </ul>
-    </template>
+      </div>
+    </div>
 
     <p v-if="sp.error.value" class="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{{ sp.error.value }}</p>
   </section>
@@ -281,6 +291,97 @@ const cover = (images) => images?.at(-1)?.url ?? images?.[0]?.url
 
 .ctrl {
   @apply flex size-9 items-center justify-center rounded-full text-neutral-400 transition hover:bg-white/5 hover:text-neutral-100 disabled:opacity-30;
+}
+/* Pochette : en grand au-dessus si le lecteur est haut, sinon carrée à gauche des commandes */
+.cover {
+  aspect-ratio: 16 / 9;
+}
+@media (min-width: 1280px) {
+  .player {
+    container-type: size;
+  }
+  .cover {
+    aspect-ratio: auto;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  /* (une requête de conteneur ne peut styler que les enfants du conteneur : d'où .player-inner) */
+  @container (max-height: 300px) {
+    .player-inner {
+      flex-direction: row;
+      align-items: stretch;
+    }
+    .cover {
+      flex: none;
+      height: 100%;
+      aspect-ratio: 1;
+    }
+    .info {
+      flex: 1;
+      gap: 0.5rem;
+    }
+    .info > * {
+      margin-top: 0;
+    }
+    .info {
+      padding-top: 1.5rem; /* sous le volume, en haut à droite */
+    }
+    .t-title {
+      font-size: 1.05rem;
+      line-height: 1.3;
+    }
+    .play-btn {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+  }
+  @container (max-height: 150px) {
+    .t-artist {
+      display: none;
+    }
+    .info {
+      gap: 0.25rem;
+    }
+    .play-btn {
+      width: 2.25rem;
+      height: 2.25rem;
+    }
+  }
+}
+/* Le titre ne rétrécit jamais (sinon il disparaît quand la place manque) */
+.info > * {
+  flex-shrink: 0;
+}
+/* Barres de progression et de volume façon Spotify : fines, remplies en vert */
+.seek {
+  height: 4px;
+  appearance: none;
+  border-radius: 999px;
+  cursor: pointer;
+  background: linear-gradient(to right, #1db954 var(--p, 0%), rgba(255, 255, 255, 0.15) var(--p, 0%));
+}
+.seek::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #fff;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.seek:hover::-webkit-slider-thumb {
+  opacity: 1;
+}
+.seek::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+}
+.seek:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 .result {
   @apply flex w-full items-center gap-3 rounded-lg p-1.5 transition hover:bg-white/5;

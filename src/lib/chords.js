@@ -35,6 +35,7 @@ function cagedName(bass, frets) {
   const fretted = frets.filter((f) => f > 0)
   const low = fretted.length ? Math.min(...fretted) : 0
   const atBottom = frets[bass] === 0 || frets[bass] <= low
+  if (bass >= 6) return '7e corde' // tonique sur la corde grave d'une 7 cordes
   if (bass === 5) return atBottom ? 'E' : 'G'
   if (bass === 4) return atBottom ? 'A' : 'C'
   return 'D'
@@ -103,7 +104,7 @@ export function chordShapes(root, chord, tuning, maxFret) {
         const score = scoreVoicing(frets, tuning, root, chord)
         if (score === null) return
         const bass = frets.reduce((b, f, i) => (f >= 0 ? i : b), -1)
-        const name = chord.power ? ['E', 'A', 'D'][5 - bass] ?? 'D' : cagedName(bass, frets)
+        const name = chord.power ? (bass >= 6 ? '7e corde' : (['E', 'A', 'D'][5 - bass] ?? 'D')) : cagedName(bass, frets)
         const prev = best.get(name)
         if (!prev || score > prev.score + 1e-9) best.set(name, { frets: [...frets], score, position })
         return

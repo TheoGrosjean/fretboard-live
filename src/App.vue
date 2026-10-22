@@ -2,11 +2,12 @@
 import { computed, onActivated, onBeforeUnmount, onDeactivated, ref, shallowRef, watch } from 'vue'
 import Fretboard from './components/Fretboard.vue'
 import Tuner from './components/Tuner.vue'
-import ComboPanel from './components/ComboPanel.vue'
 import ComboAnnouncement from './components/ComboAnnouncement.vue'
 import FinisherFight from './components/finishers/FinisherFight.vue'
 import { createTrackSession, recordEvent, sessionResult } from './lib/finisher'
 import Icon from './components/Icon.vue'
+import Dropdown from './components/ui/Dropdown.vue'
+import SettingsPanel from './components/SettingsPanel.vue'
 import SpotifyPlayer from './components/SpotifyPlayer.vue'
 import LoaderNeck from './components/loaders/LoaderNeck.vue'
 import GameMode from './components/game/GameMode.vue'
@@ -16,14 +17,14 @@ import {
   ARPEGGIOS,
   NOTE_NAMES,
   SCALES,
-  STANDARD_TUNING,
+  findTuning,
   buildOverlay,
   findPositions,
   noteName,
   pitchClass,
 } from './lib/music'
 import { keyFromTitle } from './lib/keyFromTitle'
-import { BODY_FINISHES, DEFAULT_BODY_FINISH, applyAccent } from './lib/noteStyles'
+import { DEFAULT_BODY_FINISH, applyAccent } from './lib/noteStyles'
 import { positionKey, scaleBoxes } from './lib/boxes'
 import { CHORDS, chordShapes, scaleChords } from './lib/chords'
 import { practiceRequest } from './lib/practice'
@@ -37,12 +38,7 @@ function persisted(key, initial) {
   return r
 }
 
-const sidebarOpen = persisted('sidebarOpen', true)
-// Mobile et tablette portrait : la barre latérale devient un tiroir par-dessus la page
-const narrowQuery = window.matchMedia('(max-width: 1023px)')
-const drawer = ref(narrowQuery.matches)
-narrowQuery.addEventListener('change', (e) => (drawer.value = e.matches))
-if (drawer.value) sidebarOpen.value = false
+const settingsOpen = ref(false) // panneau ⚙ (entrée audio, guitare, affichage)
 const props = defineProps({ skipSplash: { type: Boolean, default: false } })
 // Animation de chargement au lancement, mais pas en revenant de l'onglet Ampli
 const splash = ref(!props.skipSplash)
@@ -58,12 +54,11 @@ const showAlternates = persisted('showAlternates', true)
 const bodyFinish = persisted('bodyFinish', DEFAULT_BODY_FINISH)
 const matchHead = persisted('matchHead', false)
 watch(bodyFinish, applyAccent, { immediate: true }) // le thème du site suit la finition de la guitare
-// Sections dépliables de la barre latérale
-const openSections = persisted('openSections', { scale: true, audio: true, display: false })
-const toggleSection = (id) => (openSections.value = { ...openSections.value, [id]: !openSections.value[id] })
 const boxIndex = persisted('boxIndex', 0) // 0 = tout le manche, sinon numéro de la box
 
-const tuning = STANDARD_TUNING
+// Guitare : 6 ou 7 cordes, et accordage
+const tuningId = persisted('tuning', 'standard')
+const tuning = computed(() => findTuning(tuningId.value).notes)
 
 const pattern = computed(() => {
   if (overlayType.value === 'scale') return SCALES.find((s) => s.id === scaleId.value)
@@ -72,6 +67,20 @@ const pattern = computed(() => {
   return null
 })
 const isChord = computed(() => overlayType.value === 'chord')
+
+// Titre cliquable : la tonique et la gamme / l'arpège / l'accord se choisissent directement dedans
+const OVERLAY_TYPES = [
+  { id: 'scale', label: 'Gamme' },
+  { id: 'arpeggio', label: 'Arpège' },
+  { id: 'chord', label: 'Accord' },
+  { id: 'none', label: 'Aucun' },
+]
+const rootOptions = computed(() => NOTE_NAMES[notation.value].map((label, value) => ({ value, label })))
+const patternModel = computed({
+  get: () => (overlayType.value === 'scale' ? scaleId.value : overlayType.value === 'arpeggio' ? arpeggioId.value : chordId.value),
+  set: (v) => (overlayType.value === 'scale' ? (scaleId.value = v) : overlayType.value === 'arpeggio' ? (arpeggioId.value = v) : (chordId.value = v)),
+})
+const patternOptions = computed(() => (overlayType.value === 'scale' ? SCALES : overlayType.value === 'arpeggio' ? ARPEGGIOS : CHORDS).map((p) => ({ value: p.id, label: p.name })))
 
 // « Pratiquer sur le manche » depuis un cours de la page Théorie : on règle la gamme / l'accord du cours
 watch(
@@ -86,8 +95,7 @@ watch(
 )
 const overlay = computed(() => buildOverlay(root.value, pattern.value))
 // Boxes de la gamme courante (ou formes CAGED de l'accord) ; la box choisie restreint l'affichage et la détection de position
-const boxes = computed(() => (isChord.value ? chordShapes(root.value, pattern.value, tuning, frets.value) : scaleBoxes(root.value, pattern.value, tuning, frets.value)))
-const boxName = (b) => (isChord.value ? `Forme ${b.name}` : `Box ${b.index + 1}`)
+const boxes = computed(() => (isChord.value ? chordShapes(root.value, pattern.value, tuning.value, frets.value) : scaleBoxes(root.value, pattern.value, tuning.value, frets.value)))
 
 // Accords de la gamme : un clic met les notes de l'accord en avant sur la gamme
 const harmony = computed(() => (overlayType.value === 'scale' ? scaleChords(root.value, pattern.value) : []))
@@ -273,7 +281,7 @@ let settled = [] // positions sorties de la phrase (pour situer la main au débu
 let lastNoteAt = 0
 
 function placeNote(midi, forcedPosition, legato) {
-  let candidates = forcedPosition ? [forcedPosition] : findPositions(midi, tuning, frets.value)
+  let candidates = forcedPosition ? [forcedPosition] : findPositions(midi, tuning.value, frets.value)
   // Box choisie : la note est placée dans la box si elle y figure, sinon au plus près
   const box = activeBox.value
   if (box && !forcedPosition) {
@@ -292,7 +300,7 @@ function placeNote(midi, forcedPosition, legato) {
   if (phrase.length > PHRASE_LENGTH) settled.push(...phrase.splice(0, phrase.length - PHRASE_LENGTH).map((n) => n.position))
   settled = settled.slice(-4)
 
-  const path = bestFingering(phrase, handFrom(settled), activeBox.value?.center ?? rootBox(root.value))
+  const path = bestFingering(phrase, handFrom(settled), activeBox.value?.center ?? rootBox(root.value, tuning.value[5]))
   phrase.forEach((n, i) => {
     const moved = n.position && (n.position.string !== path[i].string || n.position.fret !== path[i].fret)
     n.position = path[i]
@@ -340,7 +348,17 @@ function slidePosition(slide) {
   return fret >= 0 && fret <= frets.value ? { string: from.string, fret } : null
 }
 
+// Changement de guitare : l'écoute repart avec une détection adaptée à la corde la plus grave,
+// et la note affichée (sa corde n'existe peut-être plus) est oubliée
+watch(tuningId, () => {
+  played.value = null
+  phrase = []
+  settled = []
+  if (audio.running.value) audio.start()
+})
+
 const audio = useAudioInput({
+  lowestMidi: () => Math.min(...tuning.value),
   onNote: (n) => {
     // Jam « un seul joueur à la fois » : le joueur qui attend son tour est ignoré (et coupé dans l'ampli)
     if (gameOpen.value && gameRef.value?.isMuted(n.player)) return
@@ -379,16 +397,12 @@ function onFretClick({ string, fret, midi }) {
 
 const alternates = computed(() => {
   if (!played.value || !showAlternates.value) return []
-  return findPositions(played.value.midi, tuning, frets.value).filter(
+  return findPositions(played.value.midi, tuning.value, frets.value).filter(
     (p) => p.string !== played.value.string || p.fret !== played.value.fret,
   )
 })
 
 const playedInfo = computed(() => (played.value ? overlay.value.get(pitchClass(played.value.midi)) : null))
-
-function onDeviceChange(e) {
-  audio.setDevice(e.target.value)
-}
 
 function toggleAudio() {
   audio.running.value ? audio.stop() : audio.start()
@@ -461,277 +475,25 @@ function toggleAudio() {
   </div>
 
   <div class="flex min-h-[calc(100vh-3.5rem)] bg-anthracite text-neutral-200 xl:h-[calc(100vh-3.5rem)] xl:overflow-hidden">
-    <!-- Fond assombri derrière le tiroir (mobile) -->
-    <div v-if="drawer && sidebarOpen" class="fixed inset-0 z-30 bg-black/60" @click="sidebarOpen = false" />
-    <!-- ========== Barre latérale ========== -->
-    <aside
-      class="flex shrink-0 flex-col border-r border-white/5"
-      :class="
-        drawer
-          ? ['fixed inset-y-0 left-0 z-40 h-screen w-80 max-w-[85vw] bg-neutral-900 transition-transform duration-200', sidebarOpen ? 'translate-x-0' : '-translate-x-full']
-          : ['sticky top-14 h-[calc(100vh-3.5rem)] self-start bg-neutral-900/70 backdrop-blur transition-[width] duration-200', sidebarOpen ? 'w-80' : 'w-16']
-      "
-    >
-      <!-- Titre + bouton replier (le logo est dans la barre du haut) -->
-      <div class="flex h-12 shrink-0 items-center border-b border-white/5" :class="sidebarOpen || drawer ? 'justify-between px-5' : 'justify-center'">
-        <h1 v-if="sidebarOpen || drawer" class="flex items-center gap-2 text-xs font-semibold tracking-widest whitespace-nowrap text-neutral-500 uppercase"><Icon name="sliders" class="size-4" /> Réglages</h1>
-        <button
-          class="rounded-lg p-2 text-neutral-500 transition hover:bg-white/5 hover:text-neutral-200"
-          :title="sidebarOpen ? 'Replier les réglages' : 'Déplier les réglages'"
-          @click="sidebarOpen = !sidebarOpen"
-        >
-          <Icon :name="sidebarOpen ? 'collapse' : 'expand'" class="size-5" />
-        </button>
-      </div>
-
-      <!-- Barre repliée : colonne d'icônes -->
-      <nav v-if="!sidebarOpen && !drawer" class="flex flex-col items-center gap-2 py-4">
-        <button
-          class="relative flex size-11 items-center justify-center rounded-xl transition"
-          :class="audio.running.value ? 'bg-copper-500/15 text-copper-400 hover:bg-copper-500/25' : 'bg-copper-500 text-neutral-950 hover:bg-copper-400'"
-          :title="audio.running.value ? 'Arrêter l’écoute' : 'Démarrer l’écoute'"
-          @click="toggleAudio"
-        >
-          <Icon :name="audio.running.value ? 'stop' : 'play'" class="size-5" />
-          <span v-if="audio.running.value" class="absolute top-1.5 right-1.5 size-2 animate-pulse rounded-full bg-copper-400" />
-        </button>
-        <!-- Mini vu-mètre vertical -->
-        <div v-if="audio.running.value" class="relative h-16 w-1.5 overflow-hidden rounded-full bg-neutral-800">
-          <div class="absolute bottom-0 w-full rounded-full bg-linear-to-t from-copper-500 via-copper-400 to-rose-500" :style="{ height: audio.level.value * 100 + '%' }" />
-        </div>
-        <div class="my-2 h-px w-8 bg-white/5" />
-        <button class="rail-btn" title="Gammes & accords" @click="sidebarOpen = true">
-          <span class="text-xs font-bold text-copper-300">{{ pattern ? NOTE_NAMES[notation][root] : '—' }}</span>
-        </button>
-        <button class="rail-btn" title="Entrée audio" @click="sidebarOpen = true"><Icon name="mic" class="size-5" /></button>
-        <button class="rail-btn" title="Affichage" @click="sidebarOpen = true"><Icon name="sliders" class="size-5" /></button>
-      </nav>
-
-      <!-- Barre dépliée : réglages -->
-      <div v-else class="flex-1 space-y-5 overflow-y-auto px-5 py-5">
-        <!-- Gamme / arpège / accord -->
-        <section>
-          <h2 class="section-title section-toggle" :class="{ 'is-closed': !openSections.scale }" @click="toggleSection('scale')"><Icon name="music" class="size-4" /> Gammes &amp; accords <svg class="chevron ml-auto size-4" :class="{ 'rotate-180': openSections.scale }" viewBox="0 0 20 20" fill="currentColor"><path d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4z" /></svg></h2>
-          <div v-show="openSections.scale" class="space-y-3">
-            <div class="segmented grid-cols-4">
-              <button
-                v-for="t in [
-                  { id: 'scale', label: 'Gamme' },
-                  { id: 'arpeggio', label: 'Arpège' },
-                  { id: 'chord', label: 'Accord' },
-                  { id: 'none', label: 'Aucun' },
-                ]"
-                :key="t.id"
-                :class="overlayType === t.id ? 'is-active' : ''"
-                @click="overlayType = t.id"
-              >
-                {{ t.label }}
-              </button>
-            </div>
-
-            <div class="grid grid-cols-6 gap-1">
-              <button
-                v-for="(n, i) in NOTE_NAMES[notation]"
-                :key="i"
-                :disabled="overlayType === 'none'"
-                class="rounded-md py-1.5 text-xs font-semibold transition disabled:opacity-30"
-                :class="root === i ? 'bg-copper-500 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
-                @click="root = i"
-              >
-                {{ n }}
-              </button>
-            </div>
-
-            <select v-if="overlayType === 'scale'" v-model="scaleId" class="field" aria-label="Gamme">
-              <option v-for="s in SCALES" :key="s.id" :value="s.id">{{ s.name }}</option>
-            </select>
-            <select v-else-if="overlayType === 'arpeggio'" v-model="arpeggioId" class="field" aria-label="Arpège">
-              <option v-for="a in ARPEGGIOS" :key="a.id" :value="a.id">{{ a.name }}</option>
-            </select>
-            <select v-else-if="overlayType === 'chord'" v-model="chordId" class="field" aria-label="Accord">
-              <option v-for="c in CHORDS" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-
-            <!-- Position : tout le manche ou une box (formes CAGED pour un accord) -->
-            <div v-if="boxes.length">
-              <span class="field-label">{{ isChord ? 'Forme' : 'Position' }}</span>
-              <div class="grid grid-cols-4 gap-1">
-                <button
-                  class="col-span-4 rounded-md py-1.5 text-xs font-semibold transition"
-                  :class="!boxIndex ? 'bg-copper-500 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
-                  @click="boxIndex = 0"
-                >
-                  Tout le manche
-                </button>
-                <button
-                  v-for="b in boxes"
-                  :key="b.index"
-                  class="flex flex-col items-center rounded-md py-1 transition"
-                  :class="boxIndex === b.index + 1 ? 'bg-copper-500 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
-                  :title="`Cases ${boxLabel(b)}`"
-                  @click="boxIndex = b.index + 1"
-                >
-                  <span class="text-xs font-semibold">{{ boxName(b) }}</span>
-                  <span class="text-[10px] opacity-70 tabular-nums">{{ b.ranges[0][0] }}–{{ b.ranges[0][1] }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Entrée audio -->
-        <section>
-          <h2 class="section-title section-toggle" :class="{ 'is-closed': !openSections.audio }" @click="toggleSection('audio')">
-            <Icon name="mic" class="size-4" /> Entrée audio
-            <span class="ml-auto flex items-center gap-1.5 text-[11px] font-normal tracking-normal normal-case" :class="audio.running.value ? 'text-copper-400' : 'text-neutral-600'">
-              <span class="size-2 rounded-full" :class="audio.running.value ? 'animate-pulse bg-copper-400' : 'bg-neutral-700'" />
-              {{ audio.running.value ? `${audio.sampleRate.value / 1000} kHz` : 'Arrêté' }}
-            </span>
-            <svg class="chevron size-4" :class="{ 'rotate-180': openSections.audio }" viewBox="0 0 20 20" fill="currentColor"><path d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4z" /></svg>
-          </h2>
-
-          <div v-show="openSections.audio" class="space-y-3">
-            <button
-              class="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-semibold transition"
-              :class="audio.running.value ? 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700' : 'bg-copper-500 text-neutral-950 hover:bg-copper-400'"
-              @click="toggleAudio"
-            >
-              <Icon :name="audio.running.value ? 'stop' : 'play'" class="size-4" />
-              {{ audio.running.value ? 'Arrêter' : 'Démarrer l’écoute' }}
-            </button>
-
-            <label class="block">
-              <span class="field-label">Interface</span>
-              <select class="field" :value="audio.deviceId.value" @change="onDeviceChange">
-                <option v-if="!audio.devices.value.length" value="">Clique sur Démarrer pour voir tes interfaces</option>
-                <option v-for="d in audio.devices.value" :key="d.deviceId" :value="d.deviceId">
-                  {{ d.label || 'Entrée audio' }}
-                </option>
-              </select>
-            </label>
-
-            <label class="block">
-              <span class="field-label">Canal</span>
-              <select class="field" :value="audio.channel.value" @change="audio.setChannel($event.target.value)">
-                <option value="mix">Toutes les entrées</option>
-                <option value="0">Entrée 1</option>
-                <option value="1">Entrée 2</option>
-              </select>
-            </label>
-
-            <label class="block">
-              <span class="field-label flex justify-between">
-                Sensibilité <span class="tabular-nums">{{ audio.sensitivity.value }} %</span>
-              </span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                class="w-full accent-copper-400"
-                :value="audio.sensitivity.value"
-                @input="audio.setSensitivity(Number($event.target.value))"
-              />
-            </label>
-
-            <!-- Vu-mètre -->
-            <div class="relative h-2 overflow-hidden rounded-full bg-neutral-800">
-              <div
-                class="h-full rounded-full bg-linear-to-r from-copper-500 via-copper-400 to-rose-500 transition-[width] duration-75"
-                :style="{ width: audio.level.value * 100 + '%' }"
-              />
-              <div class="absolute top-0 h-full w-0.5 bg-white/60" :style="{ left: audio.thresholdLevel.value * 100 + '%' }" />
-            </div>
-
-            <p v-if="audio.error.value" class="rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{{ audio.error.value }}</p>
-          </div>
-        </section>
-
-        <!-- Affichage -->
-        <section>
-          <h2 class="section-title section-toggle" :class="{ 'is-closed': !openSections.display }" @click="toggleSection('display')"><Icon name="sliders" class="size-4" /> Affichage <svg class="chevron ml-auto size-4" :class="{ 'rotate-180': openSections.display }" viewBox="0 0 20 20" fill="currentColor"><path d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4z" /></svg></h2>
-          <div v-show="openSections.display" class="space-y-3">
-            <div>
-              <span class="field-label">Notation</span>
-              <div class="segmented grid-cols-2">
-                <button
-                  v-for="t in [
-                    { id: 'fr', label: 'Do Ré Mi' },
-                    { id: 'en', label: 'C D E' },
-                  ]"
-                  :key="t.id"
-                  :class="notation === t.id ? 'is-active' : ''"
-                  @click="notation = t.id"
-                >
-                  {{ t.label }}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <span class="field-label">Étiquettes sur le manche</span>
-              <div class="segmented grid-cols-2">
-                <button
-                  v-for="t in [
-                    { id: 'note', label: 'Notes' },
-                    { id: 'degree', label: 'Degrés' },
-                  ]"
-                  :key="t.id"
-                  :class="labelMode === t.id ? 'is-active' : ''"
-                  @click="labelMode = t.id"
-                >
-                  {{ t.label }}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <span class="field-label">Couleur du corps</span>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="f in BODY_FINISHES"
-                  :key="f.id"
-                  :title="f.name"
-                  :aria-label="f.name"
-                  class="size-7 rounded-full ring-offset-2 ring-offset-neutral-900 transition"
-                  :class="bodyFinish === f.id ? 'ring-2 ring-copper-400' : 'ring-1 ring-white/15 hover:ring-white/40'"
-                  :style="{ background: f.color }"
-                  @click="bodyFinish = f.id"
-                />
-              </div>
-              <label class="mt-2 flex cursor-pointer items-center gap-2">
-                <input v-model="matchHead" type="checkbox" class="size-4 accent-copper-400" />
-                <span class="text-sm text-neutral-300">Tête assortie au corps</span>
-              </label>
-            </div>
-
-            <div class="grid grid-cols-2 items-end gap-3">
-              <label class="block">
-                <span class="field-label">Cases</span>
-                <select v-model.number="frets" class="field">
-                  <option :value="21">21</option>
-                  <option :value="22">22</option>
-                  <option :value="24">24</option>
-                </select>
-              </label>
-              <label class="flex cursor-pointer items-center gap-2 pb-2">
-                <input v-model="showAlternates" type="checkbox" class="size-4 accent-copper-400" />
-                <span class="text-sm text-neutral-300">Autres positions</span>
-              </label>
-            </div>
-          </div>
-        </section>
-      </div>
-    </aside>
-
     <!-- ========== Contenu principal ========== -->
-    <!-- Dans la barre du haut : menu des réglages (mobile) à gauche, entrée du mode jeu à droite, bien en vue -->
-    <Teleport v-if="active && drawer" defer to="#topbar-lead">
-      <button class="rounded-lg p-2 text-neutral-400 hover:bg-white/5 hover:text-neutral-200" title="Réglages" @click="sidebarOpen = true">
-        <Icon name="menu" class="size-6" />
-      </button>
-    </Teleport>
+    <!-- Dans la barre du haut : écoute de la guitare, réglages, et l'entrée du mode jeu, bien en vue -->
     <Teleport v-if="active" defer to="#topbar-actions">
+      <button
+        class="listen-btn"
+        :class="{ on: audio.running.value, err: audio.error.value }"
+        :title="audio.error.value || (audio.running.value ? 'Arrêter l’écoute de la guitare' : 'Écouter la guitare')"
+        @click="toggleAudio"
+      >
+        <Icon name="mic" class="size-4" />
+        <span class="max-sm:hidden">{{ audio.running.value ? 'Écoute' : 'Écouter' }}</span>
+        <!-- Mini vu-mètre -->
+        <span v-if="audio.running.value" class="relative h-1.5 w-8 overflow-hidden rounded-full bg-white/10">
+          <span class="absolute inset-y-0 left-0 rounded-full bg-copper-400 transition-[width] duration-75" :style="{ width: audio.level.value * 100 + '%' }" />
+        </span>
+      </button>
+      <button class="gear-btn" :class="{ on: settingsOpen }" title="Réglages : entrée audio, guitare, affichage" @click="settingsOpen = !settingsOpen">
+        <Icon name="sliders" class="size-5" />
+      </button>
       <button class="play-cta" title="Mode jeu plein écran (touche F)" @click="openGame">
         <Icon name="play" class="size-4" />
         JOUER
@@ -739,23 +501,41 @@ function toggleAudio() {
       </button>
     </Teleport>
 
-    <main class="flex min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 sm:py-5 lg:px-8 xl:h-[calc(100vh-3.5rem)]">
+    <SettingsPanel
+      v-if="settingsOpen && active"
+      v-model:tuning-id="tuningId"
+      v-model:notation="notation"
+      v-model:label-mode="labelMode"
+      v-model:body-finish="bodyFinish"
+      v-model:match-head="matchHead"
+      v-model:frets="frets"
+      v-model:show-alternates="showAlternates"
+      :audio="audio"
+      @close="settingsOpen = false"
+    />
+
+    <main class="mx-auto flex w-full max-w-[1700px] min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 sm:py-5 lg:px-8 xl:h-[calc(100vh-3.5rem)]">
 
       <!-- En-tête : gamme courante + note jouée -->
       <header class="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-4">
         <div class="min-w-0 flex-1 basis-60">
-          <div class="text-[11px] font-semibold tracking-widest text-neutral-500 uppercase">
-            {{ overlayType === 'arpeggio' ? 'Arpège' : overlayType === 'scale' ? 'Gamme' : isChord ? 'Accord' : 'Manche libre' }}
+          <!-- Type : gamme, arpège, accord ou manche libre -->
+          <div class="flex gap-6 text-sm font-bold tracking-[0.12em] uppercase">
+            <button v-for="t in OVERLAY_TYPES" :key="t.id" class="type-tab" :class="{ on: overlayType === t.id }" @click="overlayType = t.id">{{ t.label }}</button>
           </div>
-          <h2 class="text-2xl font-black tracking-tight text-white sm:text-3xl">
-            {{ overlayTitle }}
-            <span v-if="activeBox" class="text-copper-400">· {{ boxName(activeBox) }}</span>
+          <!-- Titre = sélecteurs : tonique et gamme se changent en cliquant dessus -->
+          <h2 class="mt-3 flex flex-wrap items-baseline gap-x-2 text-2xl font-black tracking-tight text-white sm:text-3xl">
+            <template v-if="pattern">
+              <Dropdown v-model="root" :options="rootOptions" :columns="6" label="Tonique" button-class="title-pick" />
+              <Dropdown v-model="patternModel" :options="patternOptions" :label="isChord ? 'Accord' : overlayType === 'arpeggio' ? 'Arpège' : 'Gamme'" button-class="title-pick" />
+            </template>
+            <span v-else>Manche libre</span>
           </h2>
           <div v-if="keySyncActive" class="mt-1 flex items-center gap-1.5 text-xs text-neutral-400">
             <span class="size-2 rounded-full bg-[#1DB954]" />
             Réglé d'après « <span class="max-w-80 truncate text-neutral-300">{{ keySync.title }}</span> »
           </div>
-          <div v-if="pattern" class="mt-2 flex flex-wrap gap-1.5">
+          <div v-if="pattern" class="mt-2 flex flex-wrap items-center gap-1.5">
             <span
               v-for="i in pattern.intervals"
               :key="i"
@@ -765,13 +545,20 @@ function toggleAudio() {
               {{ NOTE_NAMES[notation][(root + i) % 12] }}
               <span class="text-neutral-500">{{ overlay.get((root + i) % 12)?.degree }}</span>
             </span>
+            <!-- Position : tout le manche, une box, ou une forme d'accord -->
+            <template v-if="boxes.length">
+              <span class="mx-2 h-4 w-px bg-white/10" />
+              <div class="pos-group">
+                <button :class="{ on: !boxIndex }" @click="boxIndex = 0">Tout</button>
+                <button v-for="b in boxes" :key="b.index" :class="{ on: boxIndex === b.index + 1 }" :title="`Cases ${boxLabel(b)}`" @click="boxIndex = b.index + 1">
+                  {{ isChord ? b.name : b.index + 1 }}
+                </button>
+              </div>
+              <span v-if="activeBox" class="text-xs text-neutral-500 tabular-nums">cases {{ activeBox.ranges[0][0] }}–{{ activeBox.ranges[0][1] }}</span>
+            </template>
           </div>
         </div>
 
-        <!-- Annonces du combo, au-dessus du manche, à gauche de « Note jouée » (petits écrans : sur le manche) -->
-        <div class="relative hidden h-24 min-w-0 flex-1 basis-72 lg:block">
-          <ComboAnnouncement :announcement="combo.announcement.value" compact />
-        </div>
 
         <div class="flex items-center gap-4 rounded-2xl bg-neutral-900 py-3 pr-3 pl-5 ring-1 ring-white/5">
           <div class="text-right">
@@ -809,12 +596,9 @@ function toggleAudio() {
           :focus="activeBox?.keys ?? null"
           :muted="isChord && activeBox ? activeBox.muted : null"
           :highlight="harmonyChord"
-          :heat="pattern ? combo.state.value.mult - 1 : 0"
-          :broke-at="combo.brokeAt.value"
           :slide="slideTrail"
           @play="onFretClick"
         />
-        <div class="lg:hidden"><ComboAnnouncement :announcement="combo.announcement.value" /></div>
       </div>
       <!-- Sous le manche : accords de la gamme (la légende passe alors dans un bouton), sinon la légende -->
       <div v-if="harmony.length" class="mt-3 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-1 text-xs">
@@ -861,21 +645,10 @@ function toggleAudio() {
         <span class="text-neutral-600">Clique sur une case pour indiquer où se trouve ta main.</span>
       </div>
 
-      <!-- Accordeur + historique -->
-      <div class="mt-4 grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-2 xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
+      <!-- Backing tracks + accordeur -->
+      <div class="mt-4 grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[2fr_1fr] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
         <SpotifyPlayer ref="spotifyRef" :suggestion="backingSuggestion" @track-change="onTrackChange" @track-start="onTrackStart" @track-end="onTrackEnd" />
         <div class="flex min-h-0 flex-col gap-4">
-          <ComboPanel
-            :state="combo.state.value"
-            :floater="combo.floater.value"
-            :last-note-at="combo.lastNoteAt.value"
-            :decay-ms="combo.decayMs"
-            :active="Boolean(pattern)"
-            :items="history"
-            :notation="notation"
-            @reset="combo.reset()"
-            @clear="history = []"
-          />
           <Tuner :midi-float="audio.midiFloat.value" :frequency="audio.frequency.value" :notation="notation" />
         </div>
       </div>
@@ -891,18 +664,6 @@ function toggleAudio() {
 }
 .field-label {
   @apply mb-1 block text-xs text-neutral-500;
-}
-.section-title {
-  @apply mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-neutral-400 uppercase;
-}
-.section-toggle {
-  @apply -mx-2 cursor-pointer rounded-lg px-2 py-1 transition select-none hover:bg-white/5 hover:text-neutral-200;
-}
-.section-toggle.is-closed {
-  @apply mb-0;
-}
-.section-toggle .chevron {
-  @apply shrink-0 text-neutral-500 transition-transform;
 }
 .segmented {
   @apply grid gap-1 rounded-xl bg-neutral-800 p-1;
@@ -951,7 +712,51 @@ function toggleAudio() {
     animation: none;
   }
 }
-.rail-btn {
-  @apply flex size-11 items-center justify-center rounded-xl text-neutral-400 transition hover:bg-white/5 hover:text-neutral-100;
+/* ---------- Barre du haut : écoute et réglages ---------- */
+.listen-btn {
+  @apply flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-neutral-300 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-white;
+}
+.listen-btn.on {
+  @apply bg-copper-500/15 text-copper-300 ring-copper-400/40;
+}
+.listen-btn.err {
+  @apply text-rose-300 ring-rose-400/40;
+}
+.gear-btn {
+  @apply flex size-9 items-center justify-center rounded-xl text-neutral-400 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-white;
+}
+.gear-btn.on {
+  @apply bg-white/10 text-white;
+}
+
+/* ---------- Titre cliquable ---------- */
+.type-tab {
+  @apply relative pb-0.5 text-neutral-500 transition hover:text-neutral-300;
+}
+.type-tab.on {
+  @apply text-copper-300;
+}
+.type-tab.on::after {
+  content: '';
+  @apply absolute inset-x-0 -bottom-1 h-0.5 rounded-full bg-copper-400;
+}
+.title-pick {
+  @apply -mx-1 rounded-lg px-1 transition hover:bg-white/5;
+  text-decoration: underline dotted rgba(255, 255, 255, 0.18);
+  text-underline-offset: 6px;
+  text-decoration-thickness: 2px;
+}
+.title-pick:hover,
+.title-pick.is-open {
+  text-decoration-color: var(--color-copper-400);
+}
+.pos-group {
+  @apply flex overflow-hidden rounded-lg bg-neutral-800/80 p-0.5 text-xs font-bold;
+}
+.pos-group > button {
+  @apply min-w-7 rounded-md px-2 py-1 text-neutral-400 transition hover:text-white;
+}
+.pos-group > button.on {
+  @apply bg-copper-500 text-white;
 }
 </style>

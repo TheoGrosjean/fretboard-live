@@ -8,6 +8,16 @@ const DEFAULT_DEGREES = ['1', 'b2', '2', 'b3', '3', '4', 'b5', '5', 'b6', '6', '
 // Cordes de la plus aiguë (1) à la plus grave (6), en numéros MIDI
 export const STANDARD_TUNING = [64, 59, 55, 50, 45, 40]
 
+/** Accordages proposés (notes MIDI des cordes à vide, de la corde aiguë à la grave). */
+export const TUNINGS = [
+  { id: 'standard', name: '6 cordes · Standard', notes: STANDARD_TUNING },
+  { id: 'drop-d', name: '6 cordes · Drop D', notes: [64, 59, 55, 50, 45, 38] },
+  { id: 'eb', name: '6 cordes · Mi♭ (½ ton plus bas)', notes: [63, 58, 54, 49, 44, 39] },
+  { id: 'seven', name: '7 cordes · Standard (Si grave)', notes: [64, 59, 55, 50, 45, 40, 35] },
+  { id: 'seven-drop-a', name: '7 cordes · Drop A', notes: [64, 59, 55, 50, 45, 40, 33] },
+]
+export const findTuning = (id) => TUNINGS.find((t) => t.id === id) ?? TUNINGS[0]
+
 export const SCALES = [
   { id: 'major', name: 'Majeure (ionien)', intervals: [0, 2, 4, 5, 7, 9, 11] },
   { id: 'minor', name: 'Mineure naturelle (éolien)', intervals: [0, 2, 3, 5, 7, 8, 10] },

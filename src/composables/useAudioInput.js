@@ -1,6 +1,6 @@
 import { computed, ref, shallowRef, onBeforeUnmount } from 'vue'
 import { createYinDetector } from '../lib/pitch'
-import { freqToMidi } from '../lib/music'
+import { freqToMidi, midiToFreq } from '../lib/music'
 import { isSlide } from '../lib/combo'
 
 const STABLE_FRAMES = 3 // nombre de trames identiques avant de valider une note
@@ -32,8 +32,8 @@ const thresholdDb = (sensitivity) => THRESHOLD_MAX_DB + ((THRESHOLD_MIN_DB - THR
  * Suivi d'une voix (une guitare) : détection de hauteur trame par trame, validation des notes,
  * attaques, legato et slides. `onNote` est appelé à chaque nouvelle note.
  */
-function createVoiceTracker({ sampleRate, bufferSize, threshold, onNote }) {
-  const detect = createYinDetector(sampleRate, bufferSize)
+function createVoiceTracker({ sampleRate, bufferSize, minFreq, threshold, onNote }) {
+  const detect = createYinDetector(sampleRate, bufferSize, { minFreq })
   let candidate = null
   let candidateCount = 0
   let candidateSince = 0
@@ -138,7 +138,11 @@ function createVoiceTracker({ sampleRate, bufferSize, threshold, onNote }) {
  * Mode duo : les deux entrées de l'interface sont suivies séparément (deux guitares) ;
  * chaque note porte alors `player` (0 = entrée 1, 1 = entrée 2).
  */
-export function useAudioInput({ onNote } = {}) {
+/**
+ * lowestMidi : note de la corde la plus grave (fonction), pour régler la détection : une 7 cordes descend
+ * jusqu'au Si grave (62 Hz), voire au La (55 Hz) en Drop A.
+ */
+export function useAudioInput({ onNote, lowestMidi = () => 40 } = {}) {
   const devices = ref([])
   const deviceId = ref(localStorage.getItem('fb.deviceId') || '')
   const channel = ref(localStorage.getItem('fb.channel') || 'mix') // 'mix' | '0' | '1'
@@ -205,14 +209,18 @@ export function useAudioInput({ onNote } = {}) {
 
       const source = ctx.createMediaStreamSource(stream)
       channelCount.value = stream.getAudioTracks()[0]?.getSettings().channelCount ?? source.channelCount
-      const fftSize = ctx.sampleRate > 50000 ? 4096 : 2048
+      // Fenêtre d'analyse : au moins trois périodes de la note la plus grave (la détection a besoin de
+      // comparer deux périodes entières), et jamais moins qu'avant (2048 échantillons)
+      const lowFreq = midiToFreq(lowestMidi())
+      const fftSize = 2 ** Math.ceil(Math.log2(Math.max(2048, (3 * ctx.sampleRate) / lowFreq)))
+      const minFreq = Math.min(65, lowFreq * 0.85) // un peu de marge sous la corde à vide (accordage bas)
       nodes = [source]
       const addVoice = (player) => {
         const analyser = ctx.createAnalyser()
         analyser.fftSize = fftSize
         nodes.push(analyser)
         const emit = player === null ? (n) => onNote?.(n) : (n) => onNote?.({ ...n, player })
-        const tracker = createVoiceTracker({ sampleRate: ctx.sampleRate, bufferSize: fftSize, threshold: () => threshold.value, onNote: emit })
+        const tracker = createVoiceTracker({ sampleRate: ctx.sampleRate, bufferSize: fftSize, minFreq, threshold: () => threshold.value, onNote: emit })
         voices.push({ analyser, buffer: new Float32Array(fftSize), tracker })
         return analyser
       }
