@@ -1,10 +1,10 @@
 <script setup>
-// Barre du haut, commune à toutes les pages : logo, navigation Manche / Théorie / Ampli, actions de la page.
+// Barre du haut, commune à toutes les pages : logo, navigation Manche / Théorie / Morceaux / Ampli, actions de la page.
 // Les pages y placent leurs boutons par <Teleport to="#topbar-lead"> (à gauche) et "#topbar-actions" (à droite).
 import Icon from './Icon.vue'
 import { ampOn } from '../lib/ampStatus'
 
-const props = defineProps({ current: { type: String, required: true } }) // 'manche' | 'theorie' | 'ampli' | ''
+const props = defineProps({ current: { type: String, required: true } }) // 'manche' | 'theorie' | 'morceaux' | 'ampli' | ''
 
 // Fondu de sortie de la page avant de changer d'onglet (le fondu d'entrée est géré par Root.vue)
 const LEAVE_MS = 220
@@ -19,6 +19,7 @@ function go(e, t) {
 const TABS = [
   { id: 'manche', label: 'Manche', href: '#', icon: 'music' },
   { id: 'theorie', label: 'Théorie', href: '#theorie', icon: 'book' },
+  { id: 'morceaux', label: 'Morceaux', href: '#morceaux', icon: 'tabs' },
   { id: 'ampli', label: 'Ampli', href: '#ampli', icon: 'volume', badge: 'test' },
 ]
 </script>
@@ -47,8 +48,8 @@ const TABS = [
         @click="go($event, t)"
       >
         <Icon :name="t.icon" class="size-[18px]" />
-        <!-- Sur téléphone, seul l'onglet courant garde son nom -->
-        <span :class="{ 'max-sm:hidden': t.id !== current }">{{ t.label }}</span>
+        <!-- Sur téléphone, icônes seules (le trait cuivré marque la page courante) -->
+        <span class="max-sm:hidden">{{ t.label }}</span>
         <span v-if="t.badge" class="text-[9px] font-bold tracking-wider text-copper-400 uppercase max-sm:hidden">{{ t.badge }}</span>
         <!-- Voyant : l'ampli virtuel est allumé (il continue de jouer sur les autres onglets) -->
         <span v-if="t.id === 'ampli' && ampOn" class="amp-led" title="Ampli allumé" />
