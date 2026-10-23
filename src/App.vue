@@ -95,6 +95,9 @@ watch(
   { immediate: true },
 )
 const overlay = computed(() => buildOverlay(root.value, pattern.value))
+// Manche affiché : « Aucun » montre toutes les notes, sans tonique ni degré (le jeu et les combos gardent l'overlay vide)
+const ALL_NOTES = new Map(Array.from({ length: 12 }, (_, pc) => [pc, { interval: null, degree: '', isRoot: false }]))
+const boardOverlay = computed(() => (pattern.value ? overlay.value : ALL_NOTES))
 // Boxes de la gamme courante (ou formes CAGED de l'accord) ; la box choisie restreint l'affichage et la détection de position
 const boxes = computed(() => (isChord.value ? chordShapes(root.value, pattern.value, tuning.value, frets.value) : scaleBoxes(root.value, pattern.value, tuning.value, frets.value)))
 
@@ -586,7 +589,7 @@ function toggleAudio() {
         <Fretboard
           :tuning="tuning"
           :frets="frets"
-          :overlay="overlay"
+          :overlay="boardOverlay"
           :notation="notation"
           :label-mode="labelMode"
           :body-finish="bodyFinish"

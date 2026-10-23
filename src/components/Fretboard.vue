@@ -94,7 +94,7 @@ const playedOutside = computed(() => props.played && props.overlay.size > 0 && !
 
 function label(midi, info) {
   if (props.labelMode === 'none') return ''
-  if (props.labelMode === 'degree' && info) return info.degree
+  if (props.labelMode === 'degree' && info?.degree) return info.degree
   return noteName(midi, props.notation)
 }
 // La note jouée reste nommée, même quand les autres sont masquées
