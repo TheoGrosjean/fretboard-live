@@ -144,6 +144,15 @@ function onPillUp() {
   if (!moved && wasSelected) s.selectedNote = null // second clic sur la note : désélection
 }
 
+// Double-clic sur une case vide de la tablature : une note à cette corde et à ce moment
+function onLaneDblClick(e) {
+  if (s.mode !== 'idle' || !s.phrase || e.target.closest('.pill')) return
+  const r = e.currentTarget.getBoundingClientRect()
+  const beat = ((e.clientX - r.left) / r.width) * L.value
+  const string = Math.min(rows.value - 1, Math.max(0, Math.floor((e.clientY - r.top) / ROW)))
+  s.addNote(beat, string)
+}
+
 // ---------- Règle : délimiter la section travaillée ----------
 const dragLoop = ref(null)
 let ruler = null
@@ -232,7 +241,7 @@ const loopLabel = computed(() => {
           <span v-for="b in barLabels" :key="b.n" class="bar-num" :style="{ left: b.x + '%' }">{{ b.n }}</span>
         </div>
 
-        <div class="relative" :style="{ height: rows * ROW + 'px' }">
+        <div class="relative" :style="{ height: rows * ROW + 'px' }" :title="s.mode === 'idle' && s.phrase ? 'Double-clic sur une case vide : ajouter une note' : undefined" @dblclick="onLaneDblClick">
           <!-- Cordes -->
           <span v-for="k in rows" :key="'s' + k" class="string-line" :style="{ top: (k - 0.5) * ROW + 'px' }" />
           <!-- Grille -->

@@ -104,6 +104,13 @@ const confidence = computed(() => (s.freeResult ? Math.round(s.freeResult.confid
           <span class="text-sm text-neutral-400">corde {{ sel.string + 1 }}, case {{ sel.fret }}</span>
           <span class="text-sm text-neutral-500">· mesure {{ beatLabel(sel.beat, s.phrase.beats) }} · {{ durationLabel(selDur) }}</span>
           <span class="ml-auto flex gap-1.5">
+            <span class="flex items-center">
+              <button class="tool rounded-r-none" title="Un demi-ton plus bas" @click="s.shiftPitch(-1)">−½</button>
+              <button class="tool rounded-none border-x border-white/5" title="Un demi-ton plus haut" @click="s.shiftPitch(1)">+½</button>
+              <button class="tool rounded-none border-r border-white/5" title="Une octave plus bas" @click="s.shiftPitch(-12)">−8ve</button>
+              <button class="tool rounded-l-none" title="Une octave plus haut" @click="s.shiftPitch(12)">+8ve</button>
+            </span>
+            <button class="tool" title="Ajouter une note juste après" @click="s.addNoteAfter">＋ Note</button>
             <button class="tool" title="Écouter la note" @click="s.previewNote(sel)">▶ Écouter</button>
             <button class="tool text-rose-300" title="Supprimer la note (Suppr)" @click="s.deleteNote">Supprimer</button>
           </span>
@@ -118,9 +125,12 @@ const confidence = computed(() => (s.freeResult ? Math.round(s.freeResult.confid
           <span class="mx-1 h-4 w-px bg-white/10" />
           <button class="tool" :class="{ 'is-accent': sel.chord === 'power' }" title="Fondamentale + quinte (+ octave)" @click="s.togglePower">Power chord</button>
         </div>
-        <p class="mt-2 text-[11px] text-neutral-600">← → : déplacer d'une case · glisse la note sur la tablature (temps ↔, corde ↕) · clique une autre position sur le manche</p>
+        <p class="mt-2 text-[11px] text-neutral-600">Clique une case du manche pour changer la note · ← → : la déplacer d'une case · glisse-la sur la tablature (temps ↔, corde ↕)</p>
       </div>
-      <p v-else-if="s.editable" class="mt-4 text-xs text-neutral-600">Clique une note, sur la tablature ou sur le manche, pour la modifier. Double-clic : l'écouter.</p>
+      <p v-else-if="s.editable" class="mt-4 flex flex-wrap items-center gap-3 text-xs text-neutral-600">
+        Clique une note, sur la tablature ou sur le manche, pour la modifier. Double-clic sur une case vide de la tablature : ajouter une note.
+        <button class="tool" @click="s.addNoteAfter">＋ Ajouter une note</button>
+      </p>
     </template>
   </section>
 </template>

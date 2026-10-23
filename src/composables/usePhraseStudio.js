@@ -1054,9 +1054,50 @@ export function usePhraseStudio() {
       selectedNote.value = phrase.value.notes.findIndex((n) => n.id === id)
       return
     }
-    // Sinon : clic sur une note du phrasé -> sélection
+    // Clic sur une note du phrasé -> sélection
     const i = notes.findIndex((n) => n.string === string && n.fret === fret)
-    selectedNote.value = i >= 0 ? (i === sel ? null : i) : null
+    if (i >= 0 || sel === null) return void (selectedNote.value = i >= 0 ? (i === sel ? null : i) : null)
+    // Note sélectionnée + clic sur une case libre : la note prend cette hauteur, à cette position
+    setNoteAt(sel, { string, fret, midi })
+  }
+  /** Donne à la note i une nouvelle case (et donc une nouvelle hauteur). */
+  function setNoteAt(i, { string, fret, midi }) {
+    const n = phrase.value.notes[i]
+    commit(midi === n.midi ? 'Position' : 'Hauteur')
+    phrase.value.notes = place(phrase.value.notes.map((m, k) => (k === i ? { ...m, midi, string, fret, locked: true } : m)))
+    selectedNote.value = phrase.value.notes.findIndex((m) => m.id === n.id)
+  }
+  /** Monte ou descend la note sélectionnée de `semis` demi-tons (même corde si possible). */
+  function shiftPitch(semis) {
+    const i = selectedNote.value
+    const n = phrase.value.notes[i]
+    const midi = n.midi + semis
+    const fret = n.fret + semis
+    if (fret >= 0 && fret <= frets.value) return setNoteAt(i, { string: n.string, fret, midi })
+    const pos = nearestPosition(midi, n)
+    if (pos) setNoteAt(i, { ...pos, midi })
+  }
+  /** Ajoute une note (case donnée, ou à défaut la même que la note voisine) au temps `beat`. */
+  function addNote(beat, string = null, fret = null) {
+    const p = phrase.value
+    const b = Math.max(0, quantize(beat, p.grid))
+    if (occupied(b, -1)) return say('Une note occupe déjà cette case', 'muted')
+    const near = [...p.notes].reverse().find((n) => n.beat <= b) ?? p.notes[0]
+    const s = string ?? near?.string ?? 0
+    const f = fret ?? (string !== null && near?.string !== string ? Math.max(0, Math.min(frets.value, (near?.midi ?? tuning.value[s] + 5) - tuning.value[s])) : (near?.fret ?? 5))
+    commit('Ajout')
+    const id = uid()
+    p.notes = place([...p.notes, { id, midi: tuning.value[s] + f, beat: b, dur: step.value, string: s, fret: f, locked: true }])
+    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    selectedNote.value = p.notes.findIndex((n) => n.id === id)
+  }
+  /** Ajoute une note juste après la note sélectionnée (ou à la fin). */
+  function addNoteAfter() {
+    const p = phrase.value
+    const from = selected.value ?? p.notes.at(-1)
+    let b = from ? stepBeat(from.beat, 1, p.grid) : 0
+    while (occupied(b, -1)) b = stepBeat(b, 1, p.grid)
+    addNote(b, from?.string ?? null, from?.fret ?? null)
   }
   /** Change la corde d'une note (même hauteur), en la figeant. */
   function restring(i, string) {
@@ -1447,6 +1488,9 @@ export function usePhraseStudio() {
     step,
     onFretClick,
     restring,
+    shiftPitch,
+    addNote,
+    addNoteAfter,
     deleteNote,
     autoPlace,
     setZone,
