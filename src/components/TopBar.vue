@@ -3,8 +3,11 @@
 // Les pages y placent leurs boutons par <Teleport to="#topbar-lead"> (à gauche) et "#topbar-actions" (à droite).
 import Icon from './Icon.vue'
 import { ampOn } from '../lib/ampStatus'
+import { useAccount } from '../composables/useAccount'
 
-const props = defineProps({ current: { type: String, required: true } }) // 'manche' | 'phrases' | 'theorie' | 'ampli' | ''
+const account = useAccount()
+
+const props = defineProps({ current: { type: String, required: true } }) // 'manche' | 'phrases' | 'theorie' | 'ampli' | 'profil' | ''
 
 // Fondu de sortie de la page avant de changer d'onglet (le fondu d'entrée est géré par Root.vue)
 const LEAVE_MS = 220
@@ -16,6 +19,7 @@ function go(e, t) {
   setTimeout(() => (location.hash = t.href), LEAVE_MS)
 }
 
+const PROFILE = { id: 'profil', href: '#profil' }
 const TABS = [
   { id: 'manche', label: 'Manche', href: '#', icon: 'music' },
   { id: 'phrases', label: 'Phrasés', href: '#phrases', icon: 'repeat' },
@@ -57,6 +61,12 @@ const TABS = [
     </nav>
 
     <div id="topbar-actions" class="ml-auto flex items-center gap-2" />
+
+    <!-- Compte : initiale une fois connecté, sinon « Connexion » -->
+    <a href="#profil" class="account" :class="{ on: current === 'profil' }" :title="account.user ? `Profil · ${account.user.email}` : 'Se connecter : tes phrasés sur tous tes appareils'" @click="go($event, PROFILE)">
+      <span v-if="account.user" class="avatar">{{ account.initial }}</span>
+      <span v-else class="px-1 max-sm:hidden">Connexion</span>
+    </a>
   </header>
 </template>
 
@@ -86,6 +96,42 @@ const TABS = [
 .tab:not(.is-active):hover::after {
   transform: scaleX(0.4);
   opacity: 0.4;
+}
+.account {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0 0.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #d4d4d4;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  transition: background 0.15s, color 0.15s;
+}
+.account:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+.account.on {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-copper-400) 50%, transparent);
+}
+.account .avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 900;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-copper-400), var(--color-copper-600));
 }
 .amp-led {
   width: 7px;

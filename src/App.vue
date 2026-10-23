@@ -61,6 +61,15 @@ const boxIndex = persisted('boxIndex', 0) // 0 = tout le manche, sinon numéro d
 const tuningId = persisted('tuning', 'standard')
 const tuning = computed(() => findTuning(tuningId.value).notes)
 
+// Réglages changés ailleurs (page Phrasés, ou compte synchronisé depuis un autre appareil) : on les relit
+function reloadSettings() {
+  for (const [key, r] of Object.entries({ tuning: tuningId, notation, labelMode, frets, showAlternates, bodyFinish, matchHead })) {
+    const v = localStorage.getItem(`fb.${key}`)
+    if (v !== null && JSON.stringify(r.value) !== v) r.value = JSON.parse(v)
+  }
+}
+addEventListener('fb:settings', reloadSettings)
+
 const pattern = computed(() => {
   if (overlayType.value === 'scale') return SCALES.find((s) => s.id === scaleId.value)
   if (overlayType.value === 'arpeggio') return ARPEGGIOS.find((a) => a.id === arpeggioId.value)
@@ -261,6 +270,7 @@ function listen(on) {
 // Page affichée : ses boutons vont dans la barre du haut (JOUER, menu des réglages sur mobile)
 const active = ref(false)
 onActivated(() => {
+  reloadSettings()
   listen(true)
   active.value = true
 })

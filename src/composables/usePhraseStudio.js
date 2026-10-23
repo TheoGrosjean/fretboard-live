@@ -10,7 +10,8 @@ import { useAudioInput } from './useAudioInput'
 import { useMetronome } from './useMetronome'
 import { DEFAULT_BODY_FINISH } from '../lib/noteStyles'
 import { findPositions, findTuning, noteName } from '../lib/music'
-import { GRID_MIX, bendLabel, exportPhrases, gridStep, importPhrases, loadPhrases, loopLength, newPhrase, noteLength, placeNotes, powerShape, quantize, savePhrases, stepBeat, techOf, uid } from '../lib/phrases'
+import { GRID_MIX, bendLabel, exportPhrases, gridStep, importPhrases, loopLength, newPhrase, noteLength, placeNotes, powerShape, quantize, stepBeat, techOf, uid } from '../lib/phrases'
+import { busy, flushSave, openRequest, phrases, removePhrase, sync, syncNow } from './phraseStore'
 import { autoAlign, inferRhythm, requantize, shiftAll, smartQuantize } from '../lib/phraseRhythm'
 import {
   alignPass,
@@ -75,11 +76,14 @@ export function usePhraseStudio() {
   const tuning = computed(() => findTuning(tuningId.value).notes)
   // Le Manche a pu changer ces réglages pendant qu'on était ailleurs : on les relit en revenant
   function reloadShared() {
-    for (const [key, r] of Object.entries({ tuning: tuningId, notation, labelMode, frets, showAlternates, bodyFinish, matchHead })) {
+    const refs = { tuning: tuningId, notation, labelMode, frets, showAlternates, bodyFinish, matchHead, 'phrases.tolerance': toleranceId, 'phrases.requireTech': requireTech, 'phrases.memory': memory, 'phrases.gapClick': gapClick, 'phrases.demo': demo, 'phrases.keyCycle': keyCycle, 'phrases.guideVolume': guideVolume }
+    for (const [key, r] of Object.entries(refs)) {
       const v = localStorage.getItem(`fb.${key}`)
       if (v !== null && JSON.stringify(r.value) !== v) r.value = JSON.parse(v)
     }
   }
+  // Préférences reçues du compte (autre appareil)
+  addEventListener('fb:settings', () => reloadShared())
 
   // ---------- Préférences d'entraînement ----------
   const latency = persisted('phrases.latency', 60) // délai entre le jeu et la reconnaissance d'une note (micro + détection)
@@ -97,24 +101,23 @@ export function usePhraseStudio() {
   const settingsOpen = ref(false)
   const helpOpen = ref(false)
 
-  // ---------- Bibliothèque ----------
-  const phrases = ref(loadPhrases())
+  // ---------- Bibliothèque (partagée avec le Profil, sauvegardée et synchronisée par phraseStore) ----------
   const selectedId = persisted('phrases.selected', phrases.value[0]?.id ?? null)
   const phrase = computed(() => phrases.value.find((p) => p.id === selectedId.value) ?? null)
-  // Sauvegarde regroupée : pendant l'entraînement, les statistiques changent souvent
-  let saveTimer = 0
-  const flushSave = () => {
-    clearTimeout(saveTimer)
-    savePhrases(phrases.value)
-  }
-  watch(
-    phrases,
-    () => {
-      clearTimeout(saveTimer)
-      saveTimer = setTimeout(flushSave, 400)
-    },
-    { deep: true },
-  )
+  // Le phrasé affiché a disparu (supprimé sur un autre appareil) : on passe au premier
+  watch(phrases, (list) => {
+    if (selectedId.value && !list.some((p) => p.id === selectedId.value)) selectedId.value = list[0]?.id ?? null
+  })
+  // Ouverture demandée depuis le Profil (page déjà en mémoire ; sinon le choix est relu au chargement)
+  watch(openRequest, (id) => {
+    if (!id) return
+    if (phrases.value.some((p) => p.id === id)) {
+      stopAll()
+      selectedId.value = id
+      resetEditing()
+    }
+    openRequest.value = null
+  })
   const touch = () => phrase.value && (phrase.value.updatedAt = Date.now())
 
   const metro = useMetronome({ storageKey: 'phrases.metronome' })
@@ -138,7 +141,7 @@ export function usePhraseStudio() {
   function deletePhrase() {
     if (!confirmDelete.value) return void (confirmDelete.value = true)
     stopAll()
-    phrases.value = phrases.value.filter((p) => p.id !== selectedId.value)
+    removePhrase(selectedId.value)
     selectedId.value = phrases.value[0]?.id ?? null
     resetEditing()
   }
@@ -190,6 +193,7 @@ export function usePhraseStudio() {
 
   // ---------- Déroulé ----------
   const mode = ref('idle')
+  watch(mode, (m) => (busy.value = m !== 'idle')) // pas de synchronisation qui remplace un phrasé en cours d'utilisation
   const now = ref(null) // position courante, en temps depuis le premier clic (null si arrêté)
   const clock = ref(0) // performance.now() de la dernière image (prise libre, écoute)
   let raf = 0
@@ -1325,11 +1329,8 @@ export function usePhraseStudio() {
     audio.stop()
     flushSave()
   })
-  const onUnload = () => flushSave()
-  addEventListener('beforeunload', onUnload)
   onBeforeUnmount(() => {
     removeEventListener('keydown', onKey)
-    removeEventListener('beforeunload', onUnload)
     stopAll()
     audio.stop()
     metro.dispose()
@@ -1375,6 +1376,8 @@ export function usePhraseStudio() {
     importFile,
     importError,
     dueCount,
+    sync,
+    syncNow,
     // moteurs (refs brutes : le métronome et l'entrée audio gardent leurs refs)
     metro: markRaw(metro),
     audio: markRaw(audio),
