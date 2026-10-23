@@ -24,6 +24,12 @@ const props = defineProps({
   slide: { type: Object, default: null }, // { id, string, fromFret, toFret } : traînée lumineuse d'un grand slide
   bare: { type: Boolean, default: false }, // sans cadre ni halo (mode jeu : la scène autour s'en charge)
   playedColor: { type: String, default: null }, // couleur de la note jouée (joueur 2 du mode Jam)
+  // Repères posés à une position précise (page Phrasés) : [{ string, fret, text, sub, state, small? }]
+  // state : 'idle' | 'next' | 'soon' | 'hit' | 'miss' | 'selected' | 'dim'
+  marks: { type: Array, default: null },
+  // Techniques entre repères (page Phrasés) : [{ kind: 'hammer' | 'pull' | 'slide' | 'bend', from, to?, label, state }]
+  // from / to : { string, fret } ; state : 'idle' | 'ok' | 'miss'
+  links: { type: Array, default: null },
 })
 const emit = defineEmits(['play'])
 
@@ -99,6 +105,48 @@ function label(midi, info) {
 }
 // La note jouée reste nommée, même quand les autres sont masquées
 const playedLabel = (midi, info) => (props.labelMode === 'none' ? noteName(midi, props.notation) : label(midi, info))
+
+// Techniques : arcs de liés (h / p), traits de slide, flèches de bend
+const LINK_COLORS = { idle: '#f0956a', ok: '#34d399', miss: '#fb7185' }
+const markY = (p) => (p.fret === 0 ? fanY(p.string, noteX(0)) : stringY(p.string))
+const linkShapes = computed(() => {
+  const seen = new Map() // liés déjà tracés entre les deux mêmes cases (aller-retour h / p) : on monte d'un cran
+  return (props.links ?? []).map((l, i) => {
+    const color = LINK_COLORS[l.state] ?? LINK_COLORS.idle
+    const x1 = noteX(l.from.fret)
+    const y1 = markY(l.from)
+    if (l.kind === 'bend') {
+      // Flèche qui monte depuis la note, avec l'amplitude au bout
+      return { i, color, kind: l.kind, d: `M ${x1 + 14} ${y1 - 16} Q ${x1 + 30} ${y1 - 24} ${x1 + 30} ${y1 - 50}`, head: `M ${x1 + 24} ${y1 - 42} L ${x1 + 30} ${y1 - 52} L ${x1 + 36} ${y1 - 42}`, label: l.label, lx: x1 + 30, ly: y1 - 58 }
+    }
+    const x2 = noteX(l.to.fret)
+    const y2 = markY(l.to)
+    if (l.kind === 'slide') {
+      // Trait penché comme sur une tablature (/ en montant, \ en descendant), d'une note à l'autre
+      const dir = Math.sign(x2 - x1) || 1
+      const up = l.label === '/' ? -1 : 1
+      return { i, color, kind: l.kind, d: `M ${x1 + dir * 22} ${y1 - up * 9} L ${x2 - dir * 22} ${y2 + up * 9}` }
+    }
+    // Lié : arc au-dessus des deux notes, la lettre au sommet
+    const pair = [`${l.from.string}-${l.from.fret}`, `${l.to.string}-${l.to.fret}`].sort().join('|')
+    const rank = seen.get(pair) ?? 0
+    seen.set(pair, rank + 1)
+    const mx = (x1 + x2) / 2
+    const top = Math.min(y1, y2) - 34 - rank * 22
+    return { i, color, kind: l.kind, d: `M ${x1} ${y1 - 22} Q ${mx} ${top - 10} ${x2} ${y2 - 22}`, label: l.label, lx: mx, ly: top - 4 }
+  })
+})
+
+// Styles des repères posés (voir prop marks)
+const MARK_STYLES = {
+  idle: { fill: '#1c1917', stroke: 'var(--color-copper-400)', strokeWidth: 2, subColor: '#e8a77c' },
+  dim: { fill: '#1c1917', fillOpacity: 0.8, stroke: '#57534e', strokeWidth: 1.5, textColor: '#a8a29e', subColor: '#78716c' },
+  next: { fill: 'var(--color-copper-500)', stroke: '#fff', strokeWidth: 2.5, size: 46, subColor: '#fff', filter: 'url(#mark-glow)' },
+  soon: { fill: '#292524', stroke: 'var(--color-copper-300)', strokeWidth: 2.5, size: 42, subColor: '#fbd5bd' }, // juste après la note à jouer
+  hit: { fill: '#059669', stroke: '#34d399', strokeWidth: 2, subColor: '#d1fae5' },
+  miss: { fill: '#e11d48', stroke: '#fb7185', strokeWidth: 2, subColor: '#ffe4e6' },
+  selected: { fill: '#fafaf9', stroke: 'var(--color-copper-400)', strokeWidth: 3, size: 46, textColor: '#1c1917', subColor: '#9a3412' },
+}
 
 const colors = computed(() => accentPalette(findPalette(props.palette), props.bodyFinish))
 const bodyColor = computed(() => findBodyFinish(props.bodyFinish).color)
@@ -225,6 +273,7 @@ const isWound = (s) => s >= 3
   >
     <svg :viewBox="`0 0 ${WIDTH} ${height}`" class="w-full min-w-225 select-none" role="img" aria-label="Manche de guitare">
       <defs>
+        <filter id="mark-glow" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#f59e5b" flood-opacity="0.85" /></filter>
         <!-- Ébène : presque noir, légèrement chaud -->
         <linearGradient id="ebony" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="#1d1915" />
@@ -513,6 +562,24 @@ const isWound = (s) => s >= 3
 
         <!-- Survol -->
         <circle v-else :cx="c.x" :cy="c.y" :r="NOTE_SIZE / 2 - 3" class="fill-white/0 transition-colors hover:fill-white/15" />
+      </g>
+
+      <!-- Techniques du phrasé : liés, slides, bends -->
+      <g v-if="links" class="pointer-events-none">
+        <g v-for="l in linkShapes" :key="l.i">
+          <path :d="l.d" fill="none" stroke="#0c0a09" stroke-width="7" stroke-linecap="round" />
+          <path :d="l.d" fill="none" :stroke="l.color" :stroke-width="l.kind === 'slide' ? 4 : 3" stroke-linecap="round" />
+          <path v-if="l.head" :d="l.head" fill="none" :stroke="l.color" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+        </g>
+        <!-- Les lettres après tous les traits : un arc voisin ne les recouvre pas -->
+        <template v-for="l in linkShapes" :key="'t' + l.i">
+          <text v-if="l.label" :x="l.lx" :y="l.ly" text-anchor="middle" font-size="15" font-weight="800" :fill="l.color" stroke="#0c0a09" stroke-width="4" paint-order="stroke">{{ l.label }}</text>
+        </template>
+      </g>
+
+      <!-- Repères posés (phrasé) : au-dessus des notes, sans capter les clics -->
+      <g v-if="marks" class="pointer-events-none">
+        <NoteMark v-for="mk in marks" :key="`${mk.string}-${mk.fret}`" :class="`phrase-mark is-${mk.state}`" :x="noteX(mk.fret)" :y="mk.fret === 0 ? fanY(mk.string, noteX(0)) : stringY(mk.string)" :text="mk.text" :sub="mk.sub" v-bind="{ ...(MARK_STYLES[mk.state] ?? MARK_STYLES.idle), ...(mk.small ? { size: 32, fontSize: 12 } : {}) }" />
       </g>
 
       <!-- Cordes étouffées de la forme d'accord : croix devant le sillet -->

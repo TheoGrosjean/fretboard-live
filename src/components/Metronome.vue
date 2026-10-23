@@ -1,120 +1,18 @@
 <script setup>
-// Métronome : tempo (40–240), tap tempo, mesure, accent sur le 1er temps.
-// Les clics sont programmés sur l'horloge audio avec un peu d'avance : le tempo ne dérive jamais.
-import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
+// Module Métronome : l'interface. Le moteur (son, horloge, réglages) est dans composables/useMetronome.js ;
+// une page peut fournir le sien (prop metro) pour piloter le tempo, sinon le module crée le sien.
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted } from 'vue'
+import { MAX_BPM, MIN_BPM, SIGNATURES, SUBDIVISIONS, useMetronome, volumeDb } from '../composables/useMetronome'
 import Icon from './Icon.vue'
 
-const props = defineProps({ shortcuts: { type: Boolean, default: true } }) // false : clavier laissé au mode jeu
-
-function stored(key, initial) {
-  try {
-    const v = localStorage.getItem(`fb.metronome.${key}`)
-    return v !== null ? JSON.parse(v) : initial
-  } catch {
-    return initial
-  }
-}
-const bpm = ref(stored('bpm', 90))
-const beats = ref(stored('beats', 4)) // temps par mesure
-const accent = ref(stored('accent', true))
-const volume = ref(stored('volume', 0.7))
-const subdiv = ref(stored('subdiv', 1)) // clics par temps : 1 noire, 2 croches, 3 triolet, 4 doubles croches
-watch([bpm, beats, accent, volume, subdiv], () => {
-  localStorage.setItem('fb.metronome.bpm', JSON.stringify(bpm.value))
-  localStorage.setItem('fb.metronome.beats', JSON.stringify(beats.value))
-  localStorage.setItem('fb.metronome.accent', JSON.stringify(accent.value))
-  localStorage.setItem('fb.metronome.volume', JSON.stringify(volume.value))
-  localStorage.setItem('fb.metronome.subdiv', JSON.stringify(subdiv.value))
+const props = defineProps({
+  metro: { type: Object, default: null }, // moteur fourni par la page (voir useMetronome)
+  shortcuts: { type: Boolean, default: true }, // false : clavier laissé au mode jeu (ou géré par la page)
 })
-
-const MIN = 40
-const MAX = 240
-const SIGNATURES = [2, 3, 4, 6]
-const SUBDIVISIONS = [
-  { n: 1, label: '♩', name: 'Noires' },
-  { n: 2, label: '♫', name: 'Croches' },
-  { n: 3, label: '♫', tuplet: 3, name: 'Triolets' },
-  { n: 4, label: '♬', name: 'Doubles croches' },
-]
-const clamp = (v) => Math.min(MAX, Math.max(MIN, Math.round(v)))
-const setBpm = (v) => (bpm.value = clamp(v))
-
-// Nom du tempo, à l'italienne (repère musical)
-const tempoName = computed(() => {
-  const v = bpm.value
-  return v < 60 ? 'Largo' : v < 76 ? 'Adagio' : v < 108 ? 'Andante' : v < 120 ? 'Moderato' : v < 168 ? 'Allegro' : 'Presto'
-})
-
-// ---------- Son et horloge ----------
-const LOOKAHEAD = 0.12 // s programmées à l'avance
-let ctx = null
-let out = null
-let timer = 0
-let nextTime = 0
-let beatIndex = 0
-let subIndex = 0 // subdivision dans le temps
-const playing = ref(false)
-const current = ref(-1) // temps qui vient de sonner (pour les pastilles)
-const pending = [] // { time, beat } : temps programmés, affichés quand ils sonnent
-
-// level : 2 premier temps accentué, 1 temps, 0 subdivision (plus grave et discrète)
-function click(time, level) {
-  // Clic court et boisé : une sinusoïde aiguë qui s'éteint en 40 ms
-  const osc = ctx.createOscillator()
-  const gain = ctx.createGain()
-  osc.frequency.value = [880, 1175, 1760][level]
-  gain.gain.setValueAtTime(0, time)
-  gain.gain.linearRampToValueAtTime([0.3, 0.6, 1][level], time + 0.002)
-  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.045)
-  osc.connect(gain).connect(out)
-  osc.start(time)
-  osc.stop(time + 0.06)
-}
-
-function schedule() {
-  while (nextTime < ctx.currentTime + LOOKAHEAD) {
-    if (subIndex === 0) {
-      click(nextTime, accent.value && beatIndex === 0 ? 2 : 1)
-      pending.push({ time: nextTime, beat: beatIndex })
-    } else click(nextTime, 0)
-    nextTime += 60 / bpm.value / subdiv.value
-    if (++subIndex >= subdiv.value) {
-      subIndex = 0
-      beatIndex = (beatIndex + 1) % beats.value
-    }
-  }
-  // Pastille du temps qui sonne maintenant (latence de sortie comprise)
-  const heard = ctx.currentTime - (ctx.outputLatency || 0)
-  while (pending.length && pending[0].time <= heard) current.value = pending.shift().beat
-}
-
-async function start() {
-  ctx ??= new AudioContext({ latencyHint: 'interactive' })
-  out ??= ctx.createGain()
-  out.connect(ctx.destination)
-  out.gain.value = volume.value
-  await ctx.resume()
-  beatIndex = 0
-  subIndex = 0
-  pending.length = 0
-  nextTime = ctx.currentTime + 0.05
-  timer = setInterval(schedule, 20)
-  playing.value = true
-}
-function stop() {
-  clearInterval(timer)
-  timer = 0
-  playing.value = false
-  current.value = -1
-  pending.length = 0
-}
-const toggle = () => (playing.value ? stop() : start())
-watch(volume, (v) => out?.gain.setTargetAtTime(v, ctx.currentTime, 0.02))
-watch(beats, () => (beatIndex %= beats.value))
-onBeforeUnmount(() => {
-  stop()
-  ctx?.close()
-})
+const m = props.metro ?? useMetronome()
+const { bpm, beats, accent, volume, subdiv, playing, current, tempoName, setBpm, toggle, tap } = m
+const MIN = MIN_BPM
+const MAX = MAX_BPM
 
 // ---------- Clavier : Espace lance/arrête, ↑ ↓ ±1 BPM (±5 avec Maj), ← → changent de rythme ----------
 function onKey(e) {
@@ -123,34 +21,22 @@ function onKey(e) {
   if (e.code === 'Space') toggle()
   else if (e.key === 'ArrowUp') setBpm(bpm.value + step)
   else if (e.key === 'ArrowDown') setBpm(bpm.value - step)
-  else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-    const i = SUBDIVISIONS.findIndex((d) => d.n === subdiv.value) + (e.key === 'ArrowRight' ? 1 : -1)
-    subdiv.value = SUBDIVISIONS[(i + SUBDIVISIONS.length) % SUBDIVISIONS.length].n
-  }
+  else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') m.stepSubdiv(e.key === 'ArrowRight' ? 1 : -1)
   else return
   e.preventDefault() // pas de défilement, ni de clic sur le bouton qui a le focus
 }
 const listen = (on) => window[on ? 'addEventListener' : 'removeEventListener']('keydown', onKey)
 onMounted(() => listen(true))
 onActivated(() => listen(true))
-// La page Manche est gardée en mémoire : en changeant d'onglet, on coupe le son et le clavier
+// La page est gardée en mémoire : en changeant d'onglet, on coupe le son et le clavier
 onDeactivated(() => {
-  stop()
+  m.stop()
   listen(false)
 })
-onBeforeUnmount(() => listen(false))
-
-// ---------- Tap tempo : moyenne des derniers intervalles ----------
-let taps = []
-function tap() {
-  const now = performance.now()
-  if (taps.length && now - taps.at(-1) > 2000) taps = [] // pause trop longue : on recommence
-  taps.push(now)
-  taps = taps.slice(-6)
-  if (taps.length < 2) return
-  const gaps = taps.slice(1).map((t, i) => t - taps[i])
-  setBpm(60000 / (gaps.reduce((a, b) => a + b, 0) / gaps.length))
-}
+onBeforeUnmount(() => {
+  listen(false)
+  if (!props.metro) m.dispose()
+})
 </script>
 
 <template>
@@ -158,7 +44,7 @@ function tap() {
     <div class="metro-inner flex h-full flex-col">
       <!-- 3 colonnes : le choix du rythme reste centré au-dessus du tempo -->
       <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
-        <div class="text-[10px] font-semibold tracking-widest text-neutral-500 uppercase">Métronome</div>
+        <div class="metro-title text-[10px] font-semibold tracking-widest text-neutral-500 uppercase">Métronome</div>
         <!-- Subdivision du temps -->
         <div class="flex rounded-xl bg-neutral-800 p-1">
           <button v-for="d in SUBDIVISIONS" :key="d.n" class="sub" :class="{ on: subdiv === d.n }" :title="`${d.name} (← →)`" :aria-label="d.name" @click="subdiv = d.n">
@@ -182,7 +68,7 @@ function tap() {
             </div>
           </div>
           <Icon name="volume" class="size-3.5" />
-          <input v-model.number="volume" type="range" min="0" max="1" step="0.01" class="w-12 min-w-0 accent-copper-400" aria-label="Volume du métronome" />
+          <input v-model.number="volume" type="range" min="0" max="1" step="0.01" class="w-12 min-w-0 accent-copper-400" aria-label="Volume du métronome" :title="`Volume : ${volumeDb(volume) > 0 ? '+' : ''}${volumeDb(volume)} dB`" />
         </div>
       </div>
 
@@ -190,7 +76,7 @@ function tap() {
       <div class="tempo flex flex-1 flex-col items-center justify-center">
         <div class="flex items-center gap-5">
           <button class="step" title="−5 BPM (flèche ↓ : −1)" @click="setBpm(bpm - 5)">−</button>
-          <div class="bpm w-28 text-center leading-none font-black text-white tabular-nums">{{ bpm }}</div>
+          <div class="bpm min-w-28 px-1 text-center leading-none font-black text-white tabular-nums">{{ bpm }}</div>
           <button class="step" title="+5 BPM (flèche ↑ : +1)" @click="setBpm(bpm + 5)">+</button>
         </div>
         <div class="tempo-name mt-1.5 text-[10px] font-semibold tracking-widest text-neutral-500 uppercase">BPM · {{ tempoName }}</div>
@@ -305,6 +191,15 @@ kbd {
   }
   .beats {
     margin-top: 0.375rem;
+  }
+}
+/* Module étroit : rythmes plus serrés, titre masqué */
+@container (max-width: 400px) {
+  .metro-title {
+    display: none;
+  }
+  .sub {
+    width: 2.25rem;
   }
 }
 /* Beaucoup de hauteur : le tempo prend la place */

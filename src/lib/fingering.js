@@ -10,7 +10,7 @@
  *  - au-delà, la main se déplace : coût élevé, croissant avec la distance
  *  - changement de corde, légèrement pénalisé
  *  - corde à vide : naturelle en bas du manche, rare quand la main est haut
- *  - note legato (slide, hammer-on) : elle reste normalement sur la même corde
+ *  - note legato (slide, hammer-on) : elle reste normalement sur la même corde (un slide, toujours)
  * Et pour chaque note, un léger rappel vers la position de la main (connue, ou à défaut la box 1
  * de la gamme : case de la tonique sur la corde de Mi grave) — à hauteur égale, une box à la case 5
  * et la position ouverte sont indiscernables, il faut un a priori pour trancher.
@@ -35,10 +35,10 @@ function fretMove(a, b) {
   return d <= FINGER_REACH ? d * 0.15 : 0.5 + (d - FINGER_REACH) * 2
 }
 
-/** Coût pour jouer `to` juste après `from`. */
+/** Coût pour jouer `to` juste après `from` ; legato : true (lié), ou 'slide' (on ne quitte jamais la corde). */
 export function transitionCost(from, to, legato = false) {
   let cost = fretMove(from, to) + Math.abs(from.string - to.string) * 0.15
-  if (legato && from.string !== to.string) cost += 6
+  if (legato && from.string !== to.string) cost += legato === 'slide' ? 40 : 6
   return cost
 }
 

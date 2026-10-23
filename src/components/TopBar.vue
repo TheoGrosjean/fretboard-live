@@ -1,10 +1,10 @@
 <script setup>
-// Barre du haut, commune à toutes les pages : logo, navigation Manche / Théorie / Ampli, actions de la page.
+// Barre du haut, commune à toutes les pages : logo, navigation Manche / Phrasés / Théorie / Ampli, actions de la page.
 // Les pages y placent leurs boutons par <Teleport to="#topbar-lead"> (à gauche) et "#topbar-actions" (à droite).
 import Icon from './Icon.vue'
 import { ampOn } from '../lib/ampStatus'
 
-const props = defineProps({ current: { type: String, required: true } }) // 'manche' | 'theorie' | 'ampli' | ''
+const props = defineProps({ current: { type: String, required: true } }) // 'manche' | 'phrases' | 'theorie' | 'ampli' | ''
 
 // Fondu de sortie de la page avant de changer d'onglet (le fondu d'entrée est géré par Root.vue)
 const LEAVE_MS = 220
@@ -18,6 +18,7 @@ function go(e, t) {
 
 const TABS = [
   { id: 'manche', label: 'Manche', href: '#', icon: 'music' },
+  { id: 'phrases', label: 'Phrasés', href: '#phrases', icon: 'repeat' },
   { id: 'theorie', label: 'Théorie', href: '#theorie', icon: 'book' },
   { id: 'ampli', label: 'Ampli', href: '#ampli', icon: 'volume', badge: 'test' },
 ]
