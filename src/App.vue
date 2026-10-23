@@ -2,6 +2,7 @@
 import { computed, onActivated, onBeforeUnmount, onDeactivated, ref, shallowRef, watch } from 'vue'
 import Fretboard from './components/Fretboard.vue'
 import Tuner from './components/Tuner.vue'
+import Metronome from './components/Metronome.vue'
 import ComboAnnouncement from './components/ComboAnnouncement.vue'
 import FinisherFight from './components/finishers/FinisherFight.vue'
 import { createTrackSession, recordEvent, sessionResult } from './lib/finisher'
@@ -650,6 +651,7 @@ function toggleAudio() {
         <SpotifyPlayer ref="spotifyRef" :suggestion="backingSuggestion" @track-change="onTrackChange" @track-start="onTrackStart" @track-end="onTrackEnd" />
         <div class="flex min-h-0 flex-col gap-4">
           <Tuner :midi-float="audio.midiFloat.value" :frequency="audio.frequency.value" :notation="notation" />
+          <Metronome class="flex-1" :shortcuts="!gameOpen" />
         </div>
       </div>
     </main>
