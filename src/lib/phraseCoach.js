@@ -47,6 +47,7 @@ export function passTargets(notes, start, { from = 0, to = Infinity, transpose =
       state: null,
       offset: 0,
       power: n.chord === 'power',
+      pm: !!n.pm, // palm mute : le détecteur se trompe plus souvent d'octave sur ces notes courtes
       // Technique attendue (vérifiée à part) : 'legato' / 'slide' (la note arrive sans nouvelle attaque), 'bend'
       tech: n.bend ? 'bend' : n.tech === 'legato' || n.tech === 'slide' ? n.tech : null,
       bend: n.bend ?? 0,
@@ -63,6 +64,7 @@ const isPowerNote = (root, midi) => [0, 7].includes((((midi - root) % 12) + 12) 
 function pitchCost(target, midi, octaveOk) {
   if (target.midi === midi) return 0
   if (target.power && isPowerNote(target.midi, midi)) return 0.1
+  if (target.pm && target.midi % 12 === midi % 12) return 0.15 // note étouffée : l'octave est pardonnée
   if (octaveOk && target.midi % 12 === midi % 12) return 0.25 // erreur d'octave du détecteur, pas du guitariste
   return null
 }

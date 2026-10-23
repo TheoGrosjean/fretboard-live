@@ -57,7 +57,10 @@ function persisted(key, initial) {
   return r
 }
 
-const DETECT_SLACK_MS = 80 // délai de reconnaissance d'une note, en plus du calage, avant de la déclarer ratée
+// Les notes sont datées à leur attaque (voir useAudioInput) ; leur reconnaissance arrive ensuite, jusqu'à
+// ~140 ms plus tard : on attend ce délai avant de déclarer une note ratée
+const DETECT_SLACK_MS = 140
+const RELEASE_LAG_MS = 120 // la fin d'une note n'est constatée qu'après ce silence
 const MAX_RECORD_BARS = 16
 const SILENCE_BARS = 2 // silence qui termine l'enregistrement sur le clic
 const FREE_SILENCE_MS = 3000 // silence qui termine une prise libre
@@ -86,7 +89,9 @@ export function usePhraseStudio() {
   addEventListener('fb:settings', () => reloadShared())
 
   // ---------- Préférences d'entraînement ----------
-  const latency = persisted('phrases.latency', 60) // délai entre le jeu et la reconnaissance d'une note (micro + détection)
+  // Calage : délai d'entrée (interface audio -> navigateur). Les notes étant datées à leur attaque, il ne couvre
+  // plus le temps de reconnaissance : nouvelle clé, l'ancienne valeur (qui l'incluait) serait trop grande
+  const latency = persisted('phrases.inputLatency', 20)
   const toleranceId = persisted('phrases.tolerance', 'normal')
   const requireTech = persisted('phrases.requireTech', false) // un passage n'est propre que si les techniques sont jouées
   const autoLatency = persisted('phrases.autoLatency', true) // le calage s'ajuste tout seul pendant l'entraînement
@@ -97,6 +102,7 @@ export function usePhraseStudio() {
   const guideVolume = persisted('phrases.guideVolume', 0.6)
   const view = persisted('phrases.view', 'studio') // onglet : 'studio' | 'practice' | 'progress'
   const libraryOpen = persisted('phrases.libraryOpen', true)
+  const boardOpen = persisted('phrases.boardOpen', true) // manche affiché (replié : tout le reste tient à l'écran)
   const toleranceMs = computed(() => toleranceOf(toleranceId.value).ms)
   const settingsOpen = ref(false)
   const helpOpen = ref(false)
@@ -231,8 +237,15 @@ export function usePhraseStudio() {
     now.value = null
   }
 
-  /** Instant d'une note entendue, en temps sur la grille du métronome (latence de détection retirée). */
-  const heardBeat = () => metro.beatAt(performance.now() - latency.value)
+  /** Instant d'une note entendue, en temps sur la grille du métronome : son attaque, moins le délai d'entrée. */
+  const heardBeat = (n) => metro.beatAt((n?.at ?? performance.now()) - latency.value)
+  /** Palm mute : décidé par la détection peu après l'attaque ; reporté sur la note en cours d'enregistrement. */
+  function settleMute() {
+    if (!holding?.n?.muted) return
+    const list = mode.value === 'free' ? freeOnsets : takes.value
+    const t = list.find((x) => x.id === holding.id)
+    if (t) t.pm = true
+  }
 
   function onNote(n) {
     if (mode.value === 'record') recordNote(n)
@@ -290,6 +303,7 @@ export function usePhraseStudio() {
     restore(s)
   }
   function resetEditing() {
+    entry.value = null
     selectedNote.value = null
     confirmDelete.value = false
     past.value = []
@@ -329,7 +343,7 @@ export function usePhraseStudio() {
   const startPunch = () => startRecording({ section: true })
 
   function recordNote(n) {
-    const b = heardBeat()
+    const b = heardBeat(n)
     // Pendant le décompte, on tolère une note jouée juste avant le premier temps
     if (b === null || b < countIn.value - 0.5) return
     const offset = punch.value?.from ?? 0
@@ -348,11 +362,12 @@ export function usePhraseStudio() {
     }
     const beat = Math.max(punch.value?.from ?? 0, quantize(raw, recordGrid.value))
     if (takes.value.some((t) => t.beat === beat && t.midi === n.midi)) return // même note entendue deux fois
+    settleMute()
     // Note arrivée sans nouvelle attaque depuis la précédente : slide, ou lié (hammer-on / pull-off)
     const tech = held ? (n.slide ? 'slide' : n.legato ? 'legato' : null) : null
     const id = uid()
     takes.value = place([...takes.value, { id, midi: n.midi, beat, raw, legato: !!n.legato, tech }])
-    holding = { id, raw }
+    holding = { id, raw, n }
     showPlayed(
       n.midi,
       takes.value.find((t) => t.id === id),
@@ -361,14 +376,15 @@ export function usePhraseStudio() {
   // Durée tenue : quand le son s'arrête, la note en cours reçoit sa durée (calée sur la grille)
   watch(audio.current, (c) => {
     if (c || !holding) return
+    settleMute()
     if (mode.value === 'record') {
-      const b = heardBeat()
+      const b = metro.beatAt(performance.now() - RELEASE_LAG_MS - latency.value)
       const take = takes.value.find((t) => t.id === holding.id)
       const grid = recordGrid.value
       if (take && b !== null) take.dur = Math.max(gridStep(grid), quantize(b - countIn.value + (punch.value?.from ?? 0) - holding.raw, grid === GRID_MIX ? 4 : grid))
     } else if (mode.value === 'free') {
       const onset = freeOnsets.find((o) => o.id === holding.id)
-      if (onset) onset.dur = (performance.now() - latency.value) / 1000 - onset.t
+      if (onset) onset.dur = (performance.now() - RELEASE_LAG_MS - latency.value) / 1000 - onset.t
     }
     holding = null
   })
@@ -386,6 +402,7 @@ export function usePhraseStudio() {
   function finishRecording() {
     const p = phrase.value
     if (!p) return
+    settleMute()
     const before = recordSnapshot
     recordSnapshot = null
     const notes = takes.value
@@ -444,7 +461,7 @@ export function usePhraseStudio() {
     run('free')
   }
   function freeNote(n) {
-    const t = (performance.now() - latency.value) / 1000
+    const t = ((n.at ?? performance.now()) - latency.value) / 1000
     const held = holding && freeOnsets.find((o) => o.id === holding.id)
     if (n.bend) {
       if (held) {
@@ -454,10 +471,11 @@ export function usePhraseStudio() {
       }
       return
     }
+    settleMute()
     const id = uid()
     freeOnsets.push({ id, t, midi: n.midi, legato: !!n.legato, tech: held ? (n.slide ? 'slide' : n.legato ? 'legato' : null) : null })
     freeCount.value = freeOnsets.length
-    holding = { id }
+    holding = { id, n }
     showPlayed(n.midi, nearestPosition(n.midi, played.value))
   }
   function freeTick() {
@@ -467,7 +485,7 @@ export function usePhraseStudio() {
   }
   /** Notes d'une lecture de la prise libre. */
   function freeNotes(onsets, r) {
-    return onsets.map((o, i) => ({ id: o.id, midi: o.midi, beat: r.beats[i], dur: r.durs[i], legato: o.legato, tech: o.tech, bend: o.bend, release: o.release }))
+    return onsets.map((o, i) => ({ id: o.id, midi: o.midi, beat: r.beats[i], dur: r.durs[i], legato: o.legato, tech: o.tech, bend: o.bend, release: o.release, pm: o.pm }))
   }
   function applyFreeReading(r, label) {
     const p = phrase.value
@@ -481,6 +499,7 @@ export function usePhraseStudio() {
     if (label) say(label)
   }
   function finishFreeTake() {
+    settleMute()
     const before = recordSnapshot
     recordSnapshot = null
     if (freeOnsets.length < 2) {
@@ -526,6 +545,7 @@ export function usePhraseStudio() {
         release: !!n.release,
         glideFrom: n.tech === 'slide' && prev ? prev.midi + transpose : null, // slide : on glisse depuis la note précédente
         soft: n.tech === 'legato', // lié : attaque douce
+        muted: !!n.pm, // palm mute : son court et sourd
       }
       const chord = n.chord === 'power' ? [0, 7, 12] : [0]
       return chord.map((iv) => ({ ...base, ...tech, midi: n.midi + transpose + iv, level: n.chord === 'power' ? 0.13 : undefined }))
@@ -707,7 +727,7 @@ export function usePhraseStudio() {
     }
   }
   function practiceNote(n) {
-    const b = heardBeat()
+    const b = heardBeat(n)
     if (b === null || b < countIn.value - windowBeats()) return
     const notes = practiceNotes.value
     // Bend : il prolonge la note attaquée, ce n'est jamais une fausse note. Bend attendu : amplitude vérifiée
@@ -1044,6 +1064,7 @@ export function usePhraseStudio() {
   }
   function onFretClick({ string, fret, midi }) {
     if (mode.value !== 'idle' || !phrase.value) return
+    if (entry.value) return enterNote({ string, fret, midi })
     const notes = phrase.value.notes
     const sel = selectedNote.value
     // Note sélectionnée + clic sur une autre position de la même note : on la déplace (et on la fige)
@@ -1060,6 +1081,56 @@ export function usePhraseStudio() {
     // Note sélectionnée + clic sur une case libre : la note prend cette hauteur, à cette position
     setNoteAt(sel, { string, fret, midi })
   }
+  // ---------- Saisie au manche : chaque clic sur une case ajoute la note suivante ----------
+  const entry = ref(null) // { beat (curseur), dur (durée des notes saisies), ids (notes saisies, pour revenir) } ou null
+  function toggleEntry() {
+    if (entry.value) return void (entry.value = null)
+    if (!phrase.value) createPhrase()
+    stopAll()
+    const p = phrase.value
+    if (!p.notes.length) {
+      p.beats = metro.beats.value
+      p.grid = metro.subdiv.value
+      p.recordBpm = metro.bpm.value
+    }
+    // Le curseur part après la dernière note
+    const last = p.notes.at(-1)
+    const beat = last ? last.beat + Math.max(noteLength(p.notes, p.notes.length - 1, p.lengthBeats), gridStep(p.grid)) : 0
+    selectedNote.value = null
+    boardOpen.value = true // la saisie se fait en cliquant le manche
+    entry.value = { beat: quantize(beat, p.grid), dur: entry.value?.dur ?? Math.max(gridStep(p.grid), 0.5), ids: [] }
+  }
+  function enterNote({ string, fret, midi }) {
+    const p = phrase.value
+    const e = entry.value
+    commit('Saisie')
+    // Durée qui ne tombe pas sur la grille (triolets dans un phrasé en croches…) : grille mixte
+    if (Math.abs(e.dur * p.grid - Math.round(e.dur * p.grid)) > 1e-6 && Math.abs(e.beat * p.grid - Math.round(e.beat * p.grid)) > 1e-6) p.grid = GRID_MIX
+    while (occupied(e.beat, -1)) e.beat += e.dur
+    const id = uid()
+    p.notes = place([...p.notes, { id, midi, beat: e.beat, dur: e.dur, string, fret, locked: true }])
+    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    e.ids.push(id)
+    e.beat += e.dur
+    showPlayed(midi, { string, fret })
+    previewNote({ midi })
+  }
+  /** Saisie : un silence (le curseur avance d'une durée) */
+  const entryRest = () => entry.value && (entry.value.beat += entry.value.dur)
+  /** Saisie : retire la dernière note saisie et recule le curseur */
+  function entryBack() {
+    const e = entry.value
+    const id = e?.ids.pop()
+    if (!id) return
+    const p = phrase.value
+    const n = p.notes.find((m) => m.id === id)
+    commit('Saisie')
+    p.notes = p.notes.filter((m) => m.id !== id)
+    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    if (n) e.beat = n.beat
+  }
+  watch(mode, (m) => m !== 'idle' && (entry.value = null))
+
   /** Donne à la note i une nouvelle case (et donc une nouvelle hauteur). */
   function setNoteAt(i, { string, fret, midi }) {
     const n = phrase.value.notes[i]
@@ -1245,6 +1316,7 @@ export function usePhraseStudio() {
     else editNote({ tech: kind, bend: 0, release: false })
   }
   const toggleRelease = () => editNote({ release: !selected.value.release })
+  const togglePalmMute = () => editNote({ pm: !selected.value.pm }, 'Palm mute')
   function togglePower() {
     const id = selected.value.id
     editNote({ chord: selected.value.chord === 'power' ? null : 'power', locked: false }, 'Power chord')
@@ -1253,15 +1325,65 @@ export function usePhraseStudio() {
     selectedNote.value = phrase.value.notes.findIndex((n) => n.id === id)
   }
 
+  // ---------- Motifs : copier une section, la répéter, la coller ----------
+  const clipboard = ref(null) // { notes (temps relatifs au début du motif), length (temps) }
+  /** La section délimitée sur la règle, comme motif. */
+  function sectionClip() {
+    const p = phrase.value
+    if (!p?.loop) return null
+    const { from, to } = section.value
+    const notes = p.notes.filter((n) => n.beat >= from - 1e-6 && n.beat < to - 1e-6).map((n) => ({ ...n, beat: n.beat - from }))
+    return notes.length ? { notes, length: to - from } : null
+  }
+  /** Insère un motif au temps `at` : les notes suivantes reculent de sa longueur. */
+  function insertClip(at, clip, times, label) {
+    const p = phrase.value
+    const span = clip.length * times
+    commit(label)
+    const moved = p.notes.map((n) => (n.beat >= at - 1e-6 ? { ...n, beat: n.beat + span, raw: n.raw !== undefined ? n.raw + span : undefined } : n))
+    const copies = []
+    for (let k = 0; k < times; k++) for (const n of clip.notes) copies.push({ ...n, id: uid(), beat: at + k * clip.length + n.beat, raw: undefined })
+    p.notes = place([...moved, ...copies])
+    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    selectedNote.value = null
+  }
+  function copySection() {
+    const clip = sectionClip()
+    if (!clip) return say('Délimite d’abord une section sur la règle', 'muted')
+    clipboard.value = clip
+    say(`Motif copié · ${clip.notes.length} note${clip.notes.length > 1 ? 's' : ''}`)
+  }
+  /** Répète la section juste après elle-même. */
+  function repeatSection(times = 1) {
+    const clip = sectionClip()
+    if (!clip) return say('Délimite d’abord une section sur la règle', 'muted')
+    insertClip(section.value.to, clip, times, 'Répétition')
+    say(times > 1 ? `Motif répété ${times} fois` : 'Motif répété')
+  }
+  /** Colle le motif copié : au curseur de saisie, après la note sélectionnée, sinon à la fin du phrasé. */
+  function pasteClip() {
+    const clip = clipboard.value
+    const p = phrase.value
+    if (!clip || !p) return
+    let at
+    if (entry.value) at = entry.value.beat
+    else if (selected.value) at = Math.ceil(selected.value.beat + noteLength(p.notes, selectedNote.value, p.lengthBeats) - 1e-6)
+    else at = p.notes.length ? Math.ceil(Math.max(...p.notes.map((n, i) => n.beat + noteLength(p.notes, i, p.lengthBeats))) - 1e-6) : 0
+    insertClip(at, clip, 1, 'Collage')
+    if (entry.value) entry.value.beat += clip.length
+    say('Motif collé')
+  }
+
   // ---------- Section travaillée en boucle ----------
   function setLoop(from, to) {
     const p = phrase.value
     if (!p) return
     const a = Math.max(0, Math.min(from, to))
     const b = Math.min(p.lengthBeats, Math.max(from, to))
-    p.loop = b - a >= 0.5 && (a > 0 || b < p.lengthBeats) ? { from: a, to: b } : null
+    p.loop = b - a >= 0.5 ? { from: a, to: b } : null // tout le phrasé compris (motif à copier entier)
   }
   const clearLoop = () => phrase.value && (phrase.value.loop = null)
+  const selectAll = () => phrase.value && setLoop(0, phrase.value.lengthBeats)
 
   // ---------- Analyse ----------
   const profile = computed(() => (phrase.value ? noteProfile(phrase.value.notes, phrase.value.noteStats) : []))
@@ -1294,8 +1416,8 @@ export function usePhraseStudio() {
     await metro.start()
     run('calibrate')
   }
-  function calibrateNote() {
-    const b = metro.beatAt(performance.now()) // sans calage : c'est lui qu'on mesure
+  function calibrateNote(n) {
+    const b = metro.beatAt(n.at ?? performance.now()) // sans calage : c'est lui qu'on mesure
     if (b === null || b < countIn.value - 0.4) return
     const ms = (b - Math.round(b)) * (60000 / metro.bpm.value)
     if (Math.abs(ms) > 300) return
@@ -1336,13 +1458,20 @@ export function usePhraseStudio() {
       e.shiftKey ? redo() : undo()
       return e.preventDefault()
     }
+    // Copier / coller un motif (la section délimitée sur la règle)
+    if (mod && (e.key === 'c' || e.key === 'v') && mode.value === 'idle' && phrase.value && !getSelection()?.toString()) {
+      e.key === 'c' ? copySection() : pasteClip()
+      return e.preventDefault()
+    }
     if (mod || e.altKey) return
     const big = e.shiftKey ? 5 : 1
     if (e.code === 'Space') mode.value === 'idle' ? (phrase.value?.notes.length ? startPractice() : startRecording()) : stopAll()
     else if (e.key === 'r' || e.key === 'R') mode.value === 'record' ? stopAll() : startRecording()
     else if (e.key === 'l' || e.key === 'L') mode.value === 'free' ? stopAll() : startFreeTake()
-    else if (e.key === 'Escape') mode.value !== 'idle' ? stopAll() : helpOpen.value ? (helpOpen.value = false) : (selectedNote.value = null)
+    else if (e.key === 'Escape') mode.value !== 'idle' ? stopAll() : helpOpen.value ? (helpOpen.value = false) : entry.value ? (entry.value = null) : (selectedNote.value = null)
+    else if (e.key === 'Backspace' && entry.value) entryBack()
     else if (e.key === '?') helpOpen.value = !helpOpen.value
+    else if (e.key === 'm' || e.key === 'M') boardOpen.value = !boardOpen.value
     else if (e.key === '1' || e.key === '2' || e.key === '3') view.value = ['studio', 'practice', 'progress'][e.key - 1]
     else if (e.key === 'ArrowUp') metro.setBpm(metro.bpm.value + big)
     else if (e.key === 'ArrowDown') metro.setBpm(metro.bpm.value - big)
@@ -1400,6 +1529,7 @@ export function usePhraseStudio() {
     guideVolume,
     view,
     libraryOpen,
+    boardOpen,
     settingsOpen,
     helpOpen,
     active,
@@ -1491,6 +1621,10 @@ export function usePhraseStudio() {
     shiftPitch,
     addNote,
     addNoteAfter,
+    entry,
+    toggleEntry,
+    entryRest,
+    entryBack,
     deleteNote,
     autoPlace,
     setZone,
@@ -1509,6 +1643,7 @@ export function usePhraseStudio() {
     legatoName,
     setTech,
     toggleRelease,
+    togglePalmMute,
     togglePower,
     past,
     future,
@@ -1517,6 +1652,11 @@ export function usePhraseStudio() {
     // section
     setLoop,
     clearLoop,
+    selectAll,
+    clipboard,
+    copySection,
+    repeatSection,
+    pasteClip,
     // analyse
     profile,
     spot,

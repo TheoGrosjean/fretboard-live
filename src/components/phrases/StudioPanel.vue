@@ -41,6 +41,29 @@ const confidence = computed(() => (s.freeResult ? Math.round(s.freeResult.confid
         </span>
       </button>
     </div>
+    <!-- Écrire à la main : clic sur le manche -->
+    <div class="entry-card" :class="{ on: s.entry }">
+      <button class="flex min-w-0 flex-1 items-center gap-3 text-left" :disabled="busy || recording || free" @click="s.toggleEntry">
+        <span class="take-icon bg-white/5 text-neutral-300">
+          <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" /></svg>
+        </span>
+        <span class="min-w-0">
+          <b>{{ s.entry ? 'Saisie au manche : clique les cases' : 'Écrire à la main' }}</b>
+          <small>{{ s.entry ? 'Chaque case cliquée ajoute la note suivante. ⌫ retire la dernière, Échap termine.' : 'Sans jouer : clique les notes sur le manche, une par une, comme dans un éditeur de tablature.' }}</small>
+        </span>
+      </button>
+      <template v-if="s.entry">
+        <div class="flex items-center gap-1.5 text-xs">
+          <span class="text-neutral-500">Durée</span>
+          <div class="seg">
+            <button v-for="d in [0.25, 1 / 3, 0.5, 1, 2]" :key="d" :class="{ on: Math.abs(s.entry.dur - d) < 1e-6 }" @click="s.entry.dur = d">{{ durationLabel(d).replace(' temps', '') }}</button>
+          </div>
+          <button class="tool" title="Avancer d'une durée sans note" @click="s.entryRest">Silence</button>
+          <button class="tool" :disabled="!s.entry.ids.length" title="Retirer la dernière note saisie (⌫)" @click="s.entryBack">⌫</button>
+          <button class="tool is-accent" @click="s.toggleEntry">Terminer</button>
+        </div>
+      </template>
+    </div>
     <button v-if="s.phrase?.loop && s.phrase.notes.length && !recording && !free" class="punch-btn" :disabled="busy" title="Un décompte, puis rejoue seulement cette section : le reste du phrasé ne bouge pas" @click="s.startPunch">
       ↻ Réenregistrer seulement la section {{ loopText }}
     </button>
@@ -89,6 +112,22 @@ const confidence = computed(() => (s.freeResult ? Math.round(s.freeResult.confid
           </span>
         </span>
       </div>
+      <!-- Motifs : la section délimitée sur la règle -->
+      <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-neutral-400">
+        <span>Motif</span>
+        <template v-if="s.phrase.loop">
+          <span class="text-copper-300">{{ loopText }}</span>
+          <button class="tool" :disabled="!s.editable" title="Copier la section (⌘C)" @click="s.copySection">Copier</button>
+          <span class="flex items-center">
+            <button class="tool rounded-r-none" :disabled="!s.editable" title="Répéter la section juste après elle" @click="s.repeatSection(1)">Répéter</button>
+            <button class="tool rounded-none border-x border-white/5" :disabled="!s.editable" @click="s.repeatSection(2)">×2</button>
+            <button class="tool rounded-l-none" :disabled="!s.editable" @click="s.repeatSection(3)">×3</button>
+          </span>
+        </template>
+        <span v-else class="text-neutral-600">glisse sur la règle de la tablature pour choisir les notes à copier ou répéter</span>
+        <button v-if="s.clipboard" class="tool is-accent" :disabled="s.mode !== 'idle'" :title="`Coller ${s.clipboard.notes.length} note(s) ${s.entry ? 'au curseur' : s.selected ? 'après la note sélectionnée' : 'à la fin du phrasé'} (⌘V)`" @click="s.pasteClip">Coller {{ s.entry ? 'au curseur' : s.selected ? 'après la note' : 'à la fin' }}</button>
+      </div>
+
       <p v-if="s.alignInfo && s.editable" class="mt-3 text-xs text-neutral-400">
         {{ s.alignInfo }}
         <button v-if="Math.abs(s.lastAlignMs) >= 8 && s.latency + s.lastAlignMs >= 0" class="ml-2 font-semibold text-copper-300 hover:text-copper-400" @click="s.applyToLatency">
@@ -122,6 +161,7 @@ const confidence = computed(() => (s.freeResult ? Math.round(s.freeResult.confid
           <button class="tool" :class="{ 'is-accent': s.selTech === 'slide' }" :disabled="!s.selectedNote" @click="s.setTech('slide')">Slide</button>
           <button v-for="b in [1, 2, 3]" :key="b" class="tool" :class="{ 'is-accent': sel.bend === b }" @click="s.setTech('bend', b)">Bend {{ bendLabel(b) }}</button>
           <button v-if="sel.bend" class="tool" :class="{ 'is-accent': sel.release }" title="Le bend redescend à la note de départ" @click="s.toggleRelease">Relâché</button>
+          <button class="tool" :class="{ 'is-accent': sel.pm }" title="Note étouffée avec la paume (repérée automatiquement à l'enregistrement)" @click="s.togglePalmMute">Palm mute</button>
           <span class="mx-1 h-4 w-px bg-white/10" />
           <button class="tool" :class="{ 'is-accent': sel.chord === 'power' }" title="Fondamentale + quinte (+ octave)" @click="s.togglePower">Power chord</button>
         </div>
@@ -164,6 +204,27 @@ const confidence = computed(() => (s.freeResult ? Math.round(s.freeResult.confid
 }
 kbd {
   @apply ml-1 rounded bg-neutral-800 px-1 font-sans text-[10px] font-semibold text-neutral-300 ring-1 ring-white/10;
+}
+.entry-card {
+  @apply mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-white/[0.03] p-3.5 ring-1 ring-white/10 transition;
+}
+.entry-card.on {
+  @apply bg-copper-500/10 ring-copper-400/50;
+}
+.entry-card b {
+  @apply block text-sm font-bold text-neutral-100;
+}
+.entry-card small {
+  @apply mt-0.5 block text-xs leading-snug text-neutral-500;
+}
+.seg {
+  @apply flex rounded-lg bg-neutral-800 p-0.5;
+}
+.seg button {
+  @apply rounded-md px-2 py-1 font-bold text-neutral-400 hover:text-white;
+}
+.seg button.on {
+  @apply bg-copper-500 text-white;
 }
 .punch-btn {
   @apply mt-3 w-full rounded-xl border border-dashed border-copper-400/40 px-3 py-2 text-left text-xs font-semibold text-copper-300 transition hover:bg-copper-500/10 disabled:opacity-40;

@@ -2,6 +2,7 @@
 // Panneau des réglages du Manche (bouton ⚙ de la barre du haut) : entrée audio, guitare et affichage
 import { BODY_FINISHES } from '../lib/noteStyles'
 import { TUNINGS } from '../lib/music'
+import { CLICK_SOUNDS, clickSound, previewClick } from '../composables/useMetronome'
 
 defineProps({ audio: { type: Object, required: true } }) // voir useAudioInput
 const emit = defineEmits(['close'])
@@ -53,6 +54,25 @@ const showAlternates = defineModel('showAlternates', { type: Boolean, required: 
         </div>
         <p v-if="audio.error.value" class="rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{{ audio.error.value }}</p>
       </div>
+    </section>
+
+    <!-- Métronome -->
+    <section class="mt-6 border-t border-white/5 pt-5">
+      <h3 class="panel-title">Métronome</h3>
+      <span class="field-label">Son du clic</span>
+      <div class="grid grid-cols-3 gap-1.5">
+        <button
+          v-for="c in CLICK_SOUNDS"
+          :key="c.id"
+          class="rounded-lg px-2 py-2 text-xs font-semibold ring-1 transition"
+          :class="clickSound === c.id ? 'bg-copper-500 text-white ring-copper-400' : 'text-neutral-300 ring-white/10 hover:bg-white/5'"
+          :title="`Écouter et choisir : ${c.label}`"
+          @click="(clickSound = c.id), previewClick(c.id)"
+        >
+          {{ c.label }}
+        </button>
+      </div>
+      <p class="mt-2 text-xs text-neutral-500">Clique pour écouter. Le choix vaut pour tous les métronomes du site.</p>
     </section>
 
     <!-- Guitare et affichage -->

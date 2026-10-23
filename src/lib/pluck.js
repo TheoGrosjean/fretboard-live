@@ -35,7 +35,7 @@ function strum(notes, t, length) {
 
 /**
  * Joue une suite de notes placées dans le temps : [{ midi, at (s depuis le départ), length? (s), level?,
- * bend? (demi-tons tirés), release?, glideFrom? (slide depuis cette note), soft? (lié : attaque douce) }].
+ * bend? (demi-tons tirés), release?, glideFrom? (slide depuis cette note), soft? (lié : attaque douce), muted? (palm mute) }].
  * Renvoie { stop, duration } ; stop() coupe tout de suite (bouton Arrêter).
  */
 export function pluckTimed(notes) {
@@ -62,7 +62,9 @@ export function pluckTimed(notes) {
  */
 export const pluckVoice = (c, dest, n, t) => noteTo(c, dest, n.midi, t, (n.level ?? 0.22) * (n.soft ? 0.6 : 1), Math.max(0.35, Math.min(1.4, n.length ?? 1)), n)
 
-function noteTo(ctx, dest, midi, t, level, length, { bend = 0, release = false, glideFrom = null } = {}) {
+function noteTo(ctx, dest, midi, t, level, length, { bend = 0, release = false, glideFrom = null, muted = false } = {}) {
+  // Palm mute : la paume étouffe la corde, le son est court et sourd
+  if (muted) length = Math.min(length, 0.14)
   const osc = ctx.createOscillator()
   osc.type = 'sawtooth'
   osc.frequency.value = freq(midi)
@@ -85,7 +87,7 @@ function noteTo(ctx, dest, midi, t, level, length, { bend = 0, release = false, 
   // Le filtre se referme comme le son d'une corde qui s'éteint
   const tone = ctx.createBiquadFilter()
   tone.type = 'lowpass'
-  tone.frequency.setValueAtTime(Math.min(freq(midi) * 10, 9000), t)
+  tone.frequency.setValueAtTime(Math.min(freq(midi) * (muted ? 3 : 10), 9000), t)
   tone.frequency.exponentialRampToValueAtTime(freq(midi) * 1.5, t + length * 0.6)
   const amp = ctx.createGain()
   amp.gain.setValueAtTime(0, t)

@@ -96,6 +96,22 @@ const techMarks = computed(() => {
   return out
 })
 
+// Palm mutes : « P.M. » et un trait au-dessus des notes étouffées qui se suivent, comme sur une tablature
+const pmSegments = computed(() => {
+  if (veil.value) return []
+  const out = []
+  let seg = null
+  pills.value.forEach((p) => {
+    if (p.n.pm && p.state !== 'out') {
+      if (seg && p.i === seg.last + 1) {
+        seg.right = p.left + p.width
+        seg.last = p.i
+      } else out.push((seg = { key: p.i, left: p.left, right: p.left + p.width, last: p.i }))
+    } else seg = null
+  })
+  return out
+})
+
 // ---------- Pendant l'entraînement ----------
 const heardDots = computed(() => {
   const pass = s.shownPass
@@ -172,7 +188,14 @@ function onRulerDown(e) {
   ruler = { from: rulerBeat(e), moved: false }
   dragLoop.value = null
 }
+const hoverBeat = ref(null)
+const beatTicks = computed(() => {
+  const p = s.phrase
+  if (!p) return []
+  return Array.from({ length: Math.ceil(L.value) + 1 }, (_, k) => ({ k, x: pct(k), bar: k % p.beats === 0 }))
+})
 function onRulerMove(e) {
+  hoverBeat.value = rulerBeat(e)
   if (!ruler) return
   const to = rulerBeat(e)
   if (to !== ruler.from) ruler.moved = true
@@ -212,12 +235,13 @@ const loopLabel = computed(() => {
         </span>
       </div>
       <span class="flex-1" />
+      <button v-if="s.phrase?.notes.length && s.mode === 'idle'" class="text-[11px] tracking-normal text-neutral-500 normal-case hover:text-neutral-200" title="Sélectionner tout le phrasé" @click="s.selectAll">Tout sélectionner</button>
       <span v-if="s.phrase?.loop" class="loop-chip">
         <Icon name="repeat" class="size-3.5" />
         Boucle {{ loopLabel }}
         <button class="ml-1 text-copper-300/70 hover:text-white" title="Retirer la boucle" :disabled="s.mode === 'practice'" @click="s.clearLoop">✕</button>
       </span>
-      <span v-else-if="s.phrase?.notes.length && s.mode === 'idle'" class="tracking-normal text-neutral-600 normal-case">Glisse sur la règle pour boucler une section</span>
+
     </div>
 
     <div class="flex items-stretch gap-3">
@@ -231,14 +255,27 @@ const loopLabel = computed(() => {
       </div>
 
       <!-- Noms des cordes -->
-      <div class="flex shrink-0 flex-col pt-6 text-right text-[10px] leading-none font-semibold text-neutral-600" :class="{ 'opacity-0': veil }">
+      <div class="flex shrink-0 flex-col pt-11 text-right text-[10px] leading-none font-semibold text-neutral-600" :class="{ 'opacity-0': veil }">
         <span v-for="(n, k) in stringNames" :key="k" class="flex items-center justify-end" :style="{ height: ROW + 'px' }">{{ n }}</span>
       </div>
 
       <div ref="lanes" class="relative min-w-0 flex-1" :class="{ editable: s.editable }">
         <!-- Règle : mesures ; glisser = section en boucle -->
-        <div class="ruler relative h-6 cursor-col-resize select-none" title="Glisse pour délimiter une section à travailler en boucle" @pointerdown="onRulerDown" @pointermove="onRulerMove" @pointerup="onRulerUp" @pointercancel="onRulerUp">
+        <!-- Règle : mesures et temps ; glisser = sélection (boucle d'entraînement, motif à copier) -->
+        <div
+          class="ruler relative h-8 cursor-col-resize select-none"
+          :class="{ usable: s.phrase?.notes.length && (s.mode === 'idle' || s.mode === 'practice') }"
+          title="Glisse pour sélectionner des temps : boucle d'entraînement, motif à copier ou répéter. Un clic retire la sélection."
+          @pointerdown="onRulerDown"
+          @pointermove="onRulerMove"
+          @pointerup="onRulerUp"
+          @pointercancel="onRulerUp"
+          @pointerleave="hoverBeat = null"
+        >
+          <span v-for="t in beatTicks" :key="'b' + t.k" class="beat-tick" :class="{ bar: t.bar }" :style="{ left: t.x + '%' }" />
           <span v-for="b in barLabels" :key="b.n" class="bar-num" :style="{ left: b.x + '%' }">{{ b.n }}</span>
+          <span v-if="hoverBeat !== null && !ruler" class="ruler-hover" :style="{ left: pct(hoverBeat) + '%' }" />
+          <span v-if="!s.phrase?.loop && !dragLoop && s.phrase?.notes.length && s.mode === 'idle'" class="ruler-hint">⟷ glisse ici pour sélectionner des temps</span>
         </div>
 
         <div class="relative" :style="{ height: rows * ROW + 'px' }" :title="s.mode === 'idle' && s.phrase ? 'Double-clic sur une case vide : ajouter une note' : undefined" @dblclick="onLaneDblClick">
@@ -261,6 +298,8 @@ const loopLabel = computed(() => {
             <span v-else-if="t.kind === 'bend'" class="bend-mark" :class="`is-${t.state}`" :style="{ left: t.x + '%', top: t.y - 25 + 'px' }">↑{{ t.label }}</span>
           </template>
 
+          <!-- Palm mutes -->
+          <span v-for="g in pmSegments" :key="'pm' + g.key" class="pm-mark" :style="{ left: g.left + '%', width: g.right - g.left + '%' }">P.M.</span>
           <!-- Power chords : quinte et octave -->
           <span v-for="g in ghosts" :key="g.key" class="ghost" :class="`is-${g.state}`" :style="{ left: `calc(${g.left}% + 1px)`, width: `calc(${g.width}% - 2px)`, top: g.top + 2 + 'px' }">{{ g.label }}</span>
 
@@ -292,6 +331,8 @@ const loopLabel = computed(() => {
           </span>
         </div>
 
+        <!-- Saisie au manche : où ira la prochaine note -->
+        <span v-if="s.entry" class="entry-cursor" :style="{ left: pct(Math.min(s.entry.beat, L)) + '%' }" />
         <!-- Tête de lecture et bords de boucle (sur toute la hauteur) -->
         <span v-if="playhead !== null" class="playhead" :style="{ left: playhead + '%' }" />
         <template v-if="s.loopEdge">
@@ -321,10 +362,25 @@ const loopLabel = computed(() => {
 
 /* ---------- Règle, cordes, grille ---------- */
 .ruler {
-  @apply border-b border-white/10;
+  @apply mb-3 rounded-md bg-white/[0.04] ring-1 ring-white/10;
+}
+.ruler.usable:hover {
+  @apply bg-copper-500/10 ring-copper-400/40;
+}
+.beat-tick {
+  @apply pointer-events-none absolute bottom-0 h-2 w-px bg-white/20;
+}
+.beat-tick.bar {
+  @apply h-full bg-white/35;
 }
 .bar-num {
-  @apply absolute top-1 -translate-x-px pl-1 text-[10px] font-bold text-neutral-500 tabular-nums;
+  @apply pointer-events-none absolute top-1.5 pl-1.5 text-[11px] font-black text-neutral-300 tabular-nums;
+}
+.ruler-hover {
+  @apply pointer-events-none absolute inset-y-0 w-0.5 bg-copper-400/70;
+}
+.ruler-hint {
+  @apply pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-neutral-500;
 }
 .string-line {
   @apply pointer-events-none absolute inset-x-0 h-px bg-white/[0.07];
@@ -342,7 +398,7 @@ const loopLabel = computed(() => {
   @apply bg-white/[0.04];
 }
 .loop-band {
-  @apply pointer-events-none absolute -top-6 bottom-0 rounded-md bg-copper-500/10 ring-1 ring-copper-400/40;
+  @apply pointer-events-none absolute -top-11 bottom-0 rounded-md bg-copper-500/15 ring-1 ring-copper-400/60;
 }
 
 /* ---------- Notes ---------- */
@@ -379,6 +435,9 @@ const loopLabel = computed(() => {
 }
 .pill.heat-bad {
   @apply bg-rose-500/30 ring-rose-400/80;
+}
+.pm-mark {
+  @apply pointer-events-none absolute -top-3 flex h-2.5 items-center border-t border-dashed border-neutral-400/70 pt-1.5 text-[8px] leading-none font-black tracking-wider text-neutral-400;
 }
 .ghost {
   @apply pointer-events-none absolute flex items-center justify-center rounded-md border border-dashed border-copper-400/40 text-[10px] leading-none font-bold text-copper-300/80;
@@ -449,11 +508,14 @@ const loopLabel = computed(() => {
 .heard.echo {
   @apply bg-neutral-500;
 }
+.entry-cursor {
+  @apply pointer-events-none absolute top-11 -bottom-1 z-20 w-0.5 animate-pulse rounded bg-copper-400 shadow-[0_0_10px] shadow-copper-400/70;
+}
 .playhead {
   @apply pointer-events-none absolute -top-0.5 -bottom-1 z-20 w-0.5 rounded bg-white shadow-[0_0_10px] shadow-white/70;
 }
 .edge {
-  @apply pointer-events-none absolute top-6 -bottom-1 w-16 opacity-0 transition-opacity duration-300;
+  @apply pointer-events-none absolute top-11 -bottom-1 w-16 opacity-0 transition-opacity duration-300;
 }
 .edge.on {
   @apply opacity-100;

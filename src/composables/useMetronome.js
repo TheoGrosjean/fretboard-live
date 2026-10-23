@@ -32,6 +32,147 @@ const VOLUME_MAX_DB = 12
 export const volumeGain = (v) => (v <= 0 ? 0 : 10 ** ((VOLUME_MIN_DB + (VOLUME_MAX_DB - VOLUME_MIN_DB) * v) / 20))
 export const volumeDb = (v) => (v <= 0 ? -Infinity : Math.round(VOLUME_MIN_DB + (VOLUME_MAX_DB - VOLUME_MIN_DB) * v))
 
+// ---------- Sons du clic (au choix dans les réglages, communs à tous les métronomes) ----------
+export const CLICK_SOUNDS = [
+  { id: 'wood', label: 'Bois' },
+  { id: 'bip', label: 'Bip' },
+  { id: 'drums', label: 'Batterie' },
+  { id: 'stick', label: 'Baguette' },
+  { id: 'hat', label: 'Charleston' },
+  { id: 'cowbell', label: 'Cloche' },
+]
+const SOUND_KEY = 'fb.metronome.sound'
+export const clickSound = ref(
+  (() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(SOUND_KEY)) ?? 'wood'
+      return v === 'clave' ? 'drums' : v // les claves ont laissé la place à la batterie
+    } catch {
+      return 'wood'
+    }
+  })(),
+)
+watch(clickSound, (v) => localStorage.setItem(SOUND_KEY, JSON.stringify(v)))
+
+const noiseBuffers = new WeakMap() // un bruit blanc court par contexte audio
+function noiseOf(ctx) {
+  if (!noiseBuffers.has(ctx)) {
+    const b = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.15), ctx.sampleRate)
+    const d = b.getChannelData(0)
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1
+    noiseBuffers.set(ctx, b)
+  }
+  return noiseBuffers.get(ctx)
+}
+/** Enveloppe percussive : montée de 1 ms, puis extinction exponentielle en `decay` s. */
+function env(ctx, time, peak, decay) {
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(0, time)
+  g.gain.linearRampToValueAtTime(peak, time + 0.001)
+  g.gain.exponentialRampToValueAtTime(0.0008, time + decay)
+  return g
+}
+function tone(ctx, dest, time, { freq, type = 'sine', peak, decay, drop = 0 }) {
+  const osc = ctx.createOscillator()
+  osc.type = type
+  osc.frequency.setValueAtTime(freq, time)
+  if (drop) osc.frequency.exponentialRampToValueAtTime(freq * (1 - drop), time + decay)
+  osc.connect(env(ctx, time, peak, decay)).connect(dest)
+  osc.start(time)
+  osc.stop(time + decay + 0.02)
+  return osc
+}
+function noise(ctx, dest, time, { filter, freq, q = 1, peak, decay }) {
+  const src = ctx.createBufferSource()
+  src.buffer = noiseOf(ctx)
+  const f = ctx.createBiquadFilter()
+  f.type = filter
+  f.frequency.value = freq
+  f.Q.value = q
+  src.connect(f).connect(env(ctx, time, peak, decay)).connect(dest)
+  src.start(time)
+  src.stop(time + decay + 0.02)
+}
+
+/** Batterie : grosse caisse, caisse claire, charleston. */
+function kick(ctx, dest, time, peak) {
+  const osc = ctx.createOscillator()
+  osc.frequency.setValueAtTime(150, time)
+  osc.frequency.exponentialRampToValueAtTime(45, time + 0.12)
+  osc.connect(env(ctx, time, peak * 0.75, 0.28)).connect(dest)
+  osc.start(time)
+  osc.stop(time + 0.3)
+}
+function snare(ctx, dest, time, peak) {
+  noise(ctx, dest, time, { filter: 'bandpass', freq: 1900, q: 0.7, peak: peak * 1.1, decay: 0.14 })
+  tone(ctx, dest, time, { freq: 190, peak: peak * 0.6, decay: 0.08, drop: 0.2 })
+}
+const hat = (ctx, dest, time, peak) => noise(ctx, dest, time, { filter: 'highpass', freq: 7500, peak: peak * 0.5, decay: 0.035 })
+
+/**
+ * Joue un clic. level : 2 premier temps accentué, 1 temps, 0 subdivision (plus discrète).
+ * Chaque son garde la même logique : l'accent est plus aigu, la subdivision plus douce.
+ * beat : rang du temps dans la mesure (la batterie joue un rythme : grosse caisse, caisse claire).
+ */
+export function playClick(ctx, dest, time, level, sound = clickSound.value, beat = level === 2 ? 0 : 1) {
+  const peak = [0.3, 0.6, 1][level]
+  const pitch = [0.8, 1, 1.32][level]
+  switch (sound) {
+    case 'wood': // bloc de bois : deux résonances très brèves et un souffle d'attaque
+      tone(ctx, dest, time, { freq: 880 * pitch, peak: peak * 0.75, decay: 0.035 })
+      tone(ctx, dest, time, { freq: 1980 * pitch, peak: peak * 0.35, decay: 0.02 })
+      noise(ctx, dest, time, { filter: 'bandpass', freq: 1600 * pitch, q: 3, peak: peak * 0.5, decay: 0.012 })
+      break
+    case 'drums': // batterie : grosse caisse sur le 1 (et le 3), caisse claire sur les autres temps, charleston partout
+      if (level === 0) hat(ctx, dest, time, 0.6)
+      else {
+        hat(ctx, dest, time, 1)
+        if (beat === 0 || beat % 2 === 0) kick(ctx, dest, time, level === 2 ? 1 : 0.8)
+        else snare(ctx, dest, time, 0.8)
+      }
+      break
+    case 'stick': // baguette sur un cercle de caisse : clac bref, très présent
+      noise(ctx, dest, time, { filter: 'bandpass', freq: 2600 * pitch, q: 1.4, peak: peak * 1.8, decay: 0.022 })
+      tone(ctx, dest, time, { freq: 1700 * pitch, peak: peak * 0.4, decay: 0.015 })
+      break
+    case 'hat': // charleston fermée : souffle aigu, l'accent un peu plus ouvert
+      noise(ctx, dest, time, { filter: 'highpass', freq: 7000, peak: peak * 0.75, decay: level === 2 ? 0.09 : 0.035 })
+      break
+    case 'cowbell': // cloche : deux carrés dissonants filtrés, une queue plus longue
+      {
+        const bp = ctx.createBiquadFilter()
+        bp.type = 'bandpass'
+        bp.frequency.value = 820 * pitch
+        bp.Q.value = 2.5
+        const decay = level === 0 ? 0.08 : 0.16
+        bp.connect(env(ctx, time, peak * 0.65, decay)).connect(dest)
+        for (const f of [545, 815]) {
+          const osc = ctx.createOscillator()
+          osc.type = 'square'
+          osc.frequency.value = f * pitch
+          osc.connect(bp)
+          osc.start(time)
+          osc.stop(time + decay + 0.02)
+        }
+      }
+      break
+    default: // bip : une sinusoïde aiguë qui s'éteint en 40 ms
+      tone(ctx, dest, time, { freq: [880, 1175, 1760][level], peak, decay: 0.045 })
+  }
+}
+
+let previewCtx = null
+/** Fait entendre un son de clic (accent puis deux temps), depuis les réglages. */
+export function previewClick(sound) {
+  previewCtx ??= new AudioContext()
+  previewCtx.resume()
+  const out = previewCtx.createGain()
+  out.gain.value = 0.7
+  out.connect(previewCtx.destination)
+  const t = previewCtx.currentTime + 0.03
+  ;[2, 1, 1, 1].forEach((level, i) => playClick(previewCtx, out, t + i * 0.28, level, sound, i))
+}
+
 export function useMetronome({ storageKey = 'metronome' } = {}) {
   function stored(key, initial) {
     try {
@@ -76,19 +217,8 @@ export function useMetronome({ storageKey = 'metronome' } = {}) {
   const current = ref(-1) // temps qui vient de sonner (pour les pastilles)
   const pending = [] // { time, beat } : temps programmés, affichés quand ils sonnent
 
-  // level : 2 premier temps accentué, 1 temps, 0 subdivision (plus grave et discrète)
-  function click(time, level) {
-    // Clic court et boisé : une sinusoïde aiguë qui s'éteint en 40 ms
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.frequency.value = [880, 1175, 1760][level]
-    gain.gain.setValueAtTime(0, time)
-    gain.gain.linearRampToValueAtTime([0.3, 0.6, 1][level], time + 0.002)
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.045)
-    osc.connect(gain).connect(out)
-    osc.start(time)
-    osc.stop(time + 0.06)
-  }
+  // level : 2 premier temps accentué, 1 temps, 0 subdivision (plus discrète) ; le son choisi dans les réglages
+  const click = (time, level) => playClick(ctx, out, time, level, clickSound.value, beatIndex)
 
   /** Instant de l'horloge audio d'un temps (programmé, avant la latence de sortie). */
   function timeAtBeat(beat) {

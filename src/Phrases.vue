@@ -71,10 +71,11 @@ const punchText = computed(() => (s.punch ? `${beatLabel(s.punch.from, p.value.b
   <CalibrationDialog v-if="s.calibration" />
   <ShortcutsHelp v-if="s.helpOpen" />
 
-  <main class="mx-auto flex w-full max-w-[1700px] min-w-0 flex-col gap-5 px-4 py-4 sm:px-6 sm:py-5 lg:flex-row lg:px-8">
+  <!-- Manche replié : la page tient exactement dans l'écran (le panneau du bas défile s'il le faut) -->
+  <main class="mx-auto flex w-full max-w-[1700px] min-w-0 flex-col gap-5 px-4 py-4 sm:px-6 sm:py-5 lg:flex-row lg:px-8" :class="{ 'lg:h-[calc(100vh-3.5rem)]': !s.boardOpen && p }">
     <PhraseLibrary />
 
-    <section class="flex min-w-0 flex-1 flex-col gap-4">
+    <section class="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
       <!-- Aucun phrasé : mode d'emploi -->
       <div v-if="!p" class="intro rounded-2xl p-8 ring-1 ring-white/5">
         <div class="text-[10px] font-semibold tracking-widest text-copper-400 uppercase">Entraînement de phrasés</div>
@@ -87,6 +88,7 @@ const punchText = computed(() => (s.punch ? `${beatLabel(s.punch.from, p.value.b
         <div class="mt-8 flex flex-wrap gap-3">
           <button class="rec-btn" @click="s.startRecording()"><span class="rec-dot" /> Enregistrer sur le clic</button>
           <button class="ghost-btn" @click="s.startFreeTake">Prise libre, sans clic</button>
+          <button class="ghost-btn" @click="s.toggleEntry">Écrire à la main</button>
         </div>
       </div>
 
@@ -104,7 +106,7 @@ const punchText = computed(() => (s.punch ? `${beatLabel(s.punch.from, p.value.b
                 <span v-if="p.bestBpm" class="chip">record <b class="text-copper-300">{{ p.bestBpm }}</b></span>
                 <span v-if="review" class="chip" :class="{ due: review === 'à revoir' }">révision : {{ review }}</span>
               </template>
-              <span v-else>Pas encore de notes : enregistre ton phrasé sur le clic, ou en prise libre.</span>
+              <span v-else>Pas encore de notes : enregistre ton phrasé (sur le clic ou en prise libre), ou écris-le à la main.</span>
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -143,9 +145,10 @@ const punchText = computed(() => (s.punch ? `${beatLabel(s.punch.from, p.value.b
           </button>
         </nav>
 
-        <!-- Manche -->
-        <div class="relative">
+        <!-- Manche (repliable : la tablature et les panneaux tiennent alors à l'écran) -->
+        <div class="relative" :class="{ folded: !s.boardOpen }">
           <Fretboard
+            v-if="s.boardOpen"
             :tuning="s.tuning"
             :frets="s.frets"
             :overlay="NO_OVERLAY"
@@ -159,20 +162,25 @@ const punchText = computed(() => (s.punch ? `${beatLabel(s.punch.from, p.value.b
             :links="s.links"
             @play="s.onFretClick"
           />
+          <span v-else-if="s.counting" class="state-badge demo pointer-events-none">Décompte · {{ s.countdown }}</span>
+          <button class="board-toggle" :title="s.boardOpen ? 'Replier le manche (M)' : 'Afficher le manche (M)'" @click="s.boardOpen = !s.boardOpen">
+            {{ s.boardOpen ? '▴ Replier le manche' : '▾ Afficher le manche' }}
+          </button>
           <!-- Décompte, états, annonces, bilan : par-dessus le manche -->
           <Transition name="pop">
-            <div v-if="s.counting" :key="s.countdown" class="countdown pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div v-if="s.counting && s.boardOpen" :key="s.countdown" class="countdown pointer-events-none absolute inset-0 flex items-center justify-center">
               <span>{{ s.countdown }}</span>
             </div>
           </Transition>
           <div v-if="s.mode === 'record' && !s.counting" class="state-badge rec pointer-events-none"><span class="rec-dot animate-pulse" /> {{ s.punch ? `Section ${punchText} · joue` : 'Enregistrement · joue ton phrasé' }}</div>
           <div v-else-if="s.mode === 'free'" class="state-badge rec pointer-events-none"><span class="rec-dot animate-pulse" /> Prise libre · joue à ton tempo · {{ s.freeCount }} note{{ s.freeCount > 1 ? 's' : '' }}</div>
+          <div v-else-if="s.entry" class="state-badge demo pointer-events-none">✎ Saisie au manche · clique les cases, une note à la fois</div>
           <div v-else-if="s.demoPlaying" class="state-badge demo pointer-events-none">🎧 Écoute… puis rejoue-le</div>
           <div v-else-if="s.clickMuted" class="state-badge quiet pointer-events-none">Clic coupé · garde le tempo</div>
           <Transition name="toast">
             <div v-if="s.toast" :key="s.toast.id" class="toast pointer-events-none" :class="`tone-${s.toast.tone}`">{{ s.toast.text }}</div>
           </Transition>
-          <div v-if="s.summary && s.mode === 'idle'" class="absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+          <div v-if="s.summary && s.mode === 'idle'" class="z-40 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" :class="s.boardOpen ? 'absolute inset-0' : 'fixed inset-0'">
             <SessionSummary />
           </div>
         </div>
@@ -181,10 +189,10 @@ const punchText = computed(() => (s.punch ? `${beatLabel(s.punch.from, p.value.b
         <TabRail />
 
         <!-- Espace courant + métronome -->
-        <ProgressPanel v-if="s.view === 'progress'" />
-        <div v-else class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
-          <StudioPanel v-if="s.view === 'studio'" />
-          <PracticePanel v-else />
+        <ProgressPanel v-if="s.view === 'progress'" :class="{ 'lg:min-h-0 lg:flex-1 lg:overflow-y-auto': !s.boardOpen }" />
+        <div v-else class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]" :class="{ 'lg:min-h-0 lg:flex-1': !s.boardOpen }">
+          <StudioPanel v-if="s.view === 'studio'" :class="{ 'lg:min-h-0 lg:overflow-y-auto': !s.boardOpen }" />
+          <PracticePanel v-else :class="{ 'lg:min-h-0 lg:overflow-y-auto': !s.boardOpen }" />
           <Metronome :metro="s.metro" :shortcuts="false" class="min-h-56" />
         </div>
       </template>
@@ -311,6 +319,22 @@ const punchText = computed(() => (s.punch ? `${beatLabel(s.punch.from, p.value.b
 /* Dans la bande libre au-dessus du manche : rien ne cache les notes de la corde aiguë */
 .state-badge {
   @apply absolute top-3 left-6 flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold whitespace-nowrap text-white shadow-lg;
+}
+.board-toggle {
+  @apply absolute top-2.5 right-3 z-30 rounded-lg bg-neutral-900/80 px-2.5 py-1 text-[11px] font-semibold text-neutral-400 ring-1 ring-white/10 backdrop-blur transition hover:text-white;
+}
+/* Manche replié : plus de manche ; le bouton et les annonces remontent sur la ligne des onglets */
+.folded {
+  @apply -mt-4 h-0;
+}
+.folded .board-toggle {
+  @apply -top-9 right-0;
+}
+.folded .state-badge {
+  @apply -top-10 right-40 left-auto;
+}
+.folded .toast {
+  @apply -top-10;
 }
 .state-badge.rec {
   @apply bg-rose-600/90;

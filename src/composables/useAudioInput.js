@@ -15,6 +15,20 @@ const BEND_MIN_GLIDE_FRAMES = 3 // trames en mouvement depuis la note de départ
 const BEND_BETWEEN_RATIO = 0.35 // part de ces trames entre deux demi-tons
 const BEND_BETWEEN_CENTS = 20 // écart au demi-tonne le plus proche pour être « entre deux »
 const BEND_CONTINUE_MS = 600 // un bend lent peut valider le demi-ton intermédiaire : on le prolonge
+// Attaques : le volume est suivi tous les 4 ms (la fenêtre de hauteur, ~85 ms, noie les attaques rapprochées,
+// comme des palm mutes en doubles croches), sur une fenêtre d'au moins une période de la note la plus grave
+// (sinon le volume d'une tranche varie avec la forme de l'onde). Une attaque = un volume au moins 1,8 fois
+// plus fort que le plus faible des 40 ms qui précèdent.
+const ONSET_BLOCK_MS = 4
+const ONSET_LOOKBACK_MS = 40
+const ONSET_RATIO = 1.8
+// Le « clic » du médiator : sur le signal dérivé (les aigus), une note rejouée pendant qu'elle sonne encore
+// se voit nettement, même quand le volume global monte peu
+const PICK_RATIO = 2.5
+const ONSET_REFRACTORY_MS = 45 // deux attaques ne sont pas plus proches
+// Palm mute : la note étouffée s'éteint vite ; 90 ms après l'attaque, elle a perdu plus de 10 dB
+const MUTE_PROBE_MS = 90
+const MUTE_DROP = 0.3
 
 // Échelles en décibels : l'oreille (et le signal d'une guitare) suit une loi logarithmique
 const METER_MIN_DB = -80 // bas du vu-mètre
@@ -32,21 +46,95 @@ const thresholdDb = (sensitivity) => THRESHOLD_MAX_DB + ((THRESHOLD_MIN_DB - THR
  * Suivi d'une voix (une guitare) : détection de hauteur trame par trame, validation des notes,
  * attaques, legato et slides. `onNote` est appelé à chaque nouvelle note.
  */
-function createVoiceTracker({ sampleRate, bufferSize, minFreq, threshold, onNote }) {
+export function createVoiceTracker({ sampleRate, bufferSize, minFreq, threshold, onNote }) {
   const detect = createYinDetector(sampleRate, bufferSize, { minFreq })
+  // Juste après une attaque, la longue fenêtre contient encore la note précédente : la hauteur est cherchée
+  // sur une fenêtre courte (un peu plus de deux périodes de la note la plus grave), prise sur les échantillons
+  // les plus récents — une note étouffée (palm mute) s'éteint avant que la longue fenêtre soit propre
+  const shortSize = 2 ** Math.ceil(Math.log2(Math.ceil((2.2 * sampleRate) / minFreq)))
+  const detectShort = shortSize < bufferSize ? createYinDetector(sampleRate, shortSize, { minFreq }) : null
+  const shortMs = (shortSize / sampleRate) * 1000
+  const block = Math.max(64, Math.round((sampleRate * ONSET_BLOCK_MS) / 1000)) // pas du suivi
+  const span = Math.max(block, Math.round((sampleRate * 1.1) / minFreq)) // fenêtre du volume : une période et un peu plus
+  const lookback = Math.round((sampleRate * ONSET_LOOKBACK_MS) / 1000)
+  const windowMs = (bufferSize / sampleRate) * 1000
+  let lastFrameAt = 0
+  let lastOnsetAt = -Infinity
+  let pendingOnsetAt = null // instant de la dernière attaque pas encore attribuée à une note
+  let pendingPeak = 0 // volume au sommet de cette attaque
+  let probe = null // { note, at, peak } : mesure de l'extinction de la dernière note (palm mute)
   let candidate = null
   let candidateCount = 0
   let candidateSince = 0
   let attackPending = false // une attaque a eu lieu depuis la dernière note émise
   let swept = new Set() // demi-tons entendus depuis la dernière note émise (pour reconnaître un slide)
   let lastSoundAt = 0
-  let smoothedRms = 0
   let current = null // note stabilisée en cours : { midi, freq, cents }
   // Suivi du glissé continu depuis la dernière note émise (pour reconnaître un bend)
   let glideFrames = 0
   let betweenFrames = 0
   let bendFrom = null // note de départ du bend en cours
   let lastBendAt = 0
+
+  /** Volume (RMS) de la fenêtre qui se termine à l'échantillon `end`. */
+  function rmsBefore(buffer, end) {
+    let sum = 0
+    for (let i = end - span; i < end; i++) sum += buffer[i] * buffer[i]
+    return Math.sqrt(sum / span)
+  }
+  /** Même chose sur le signal dérivé (les aigus : le clic du médiator). */
+  function pickBefore(buffer, end) {
+    let sum = 0
+    for (let i = end - span; i < end; i++) sum += (buffer[i] - buffer[i - 1]) ** 2
+    return Math.sqrt(sum / span)
+  }
+  /** Attaque dans les échantillons arrivés depuis la trame précédente : { at (ms), peak }, ou null. */
+  function findOnset(buffer, now) {
+    const fresh = Math.round(((now - lastFrameAt) / 1000) * sampleRate) + block
+    lastFrameAt = now
+    const start = Math.max(span + lookback + 1, buffer.length - Math.min(fresh, buffer.length / 2))
+    // Référence : seulement des fenêtres entièrement après la dernière attaque (sinon le silence d'avant
+    // une note la ferait repérer une seconde fois)
+    const endTime = (e) => now - ((buffer.length - e) / sampleRate) * 1000
+    const afterLast = (e) => endTime(e) - (span / sampleRate) * 1000 >= lastOnsetAt
+    let floor = Infinity
+    let pickFloor = Infinity
+    for (let e = start - lookback; e < start; e += block) {
+      if (!afterLast(e)) continue
+      floor = Math.min(floor, rmsBefore(buffer, e))
+      pickFloor = Math.min(pickFloor, pickBefore(buffer, e))
+    }
+    for (let e = start; e <= buffer.length; e += block) {
+      const r = rmsBefore(buffer, e)
+      const k = pickBefore(buffer, e)
+      if (!afterLast(e)) continue
+      if ((r > floor * ONSET_RATIO || k > pickFloor * PICK_RATIO) && r > threshold() * 1.3) {
+        // L'attaque est entrée dans la fenêtre peu avant qu'elle franchisse le seuil
+        const at = endTime(e - span * 0.35)
+        if (at - lastOnsetAt < ONSET_REFRACTORY_MS) return null
+        lastOnsetAt = at
+        // Sommet de l'attaque : le volume le plus fort depuis
+        let peak = r
+        for (let c = e + block; c <= buffer.length; c += block) peak = Math.max(peak, rmsBefore(buffer, c))
+        return { at, peak, index: Math.round(e - span * 0.35) }
+      }
+      floor = Math.min(floor, r)
+      pickFloor = Math.min(pickFloor, k)
+    }
+    return null
+  }
+  /**
+   * Palm mute : la note mesurée s'est-elle éteinte très vite ? Décidé une fois, MUTE_PROBE_MS après son attaque,
+   * ou à l'attaque suivante si elle arrive avant (le volume est alors pris juste avant cette attaque).
+   */
+  function checkMute(buffer, now, nextOnset = null) {
+    if (!probe) return
+    if (!nextOnset && now - probe.at < MUTE_PROBE_MS) return
+    const end = nextOnset ? Math.max(span + 1, nextOnset.index) : buffer.length
+    const elapsed = (nextOnset ? nextOnset.at : now) - probe.at
+    if (elapsed >= 40) probe.note.muted = rmsBefore(buffer, end) < probe.peak * MUTE_DROP
+    probe = null
+  }
 
   /** Traite une trame ; renvoie le niveau (0–1 sur le vu-mètre) et la hauteur brute, ou null. */
   function process(buffer, now) {
@@ -55,15 +143,32 @@ function createVoiceTracker({ sampleRate, bufferSize, minFreq, threshold, onNote
     const rms = Math.sqrt(sum / buffer.length)
     const level = meterPosition(toDb(rms))
 
-    // Attaque : forte hausse du volume => nouvelle note même si identique
-    const attack = rms > smoothedRms * 1.8 && rms > threshold() * 2
-    smoothedRms = smoothedRms * 0.8 + rms * 0.2
+    // Attaque : forte hausse du volume => nouvelle note même si identique (sur tranches courtes, ou à
+    // défaut sur toute la fenêtre)
+    const onset = findOnset(buffer, now)
+    const attack = onset !== null
+    if (attack) {
+      pendingOnsetAt = onset.at
+      pendingPeak = onset.peak
+      // La fenêtre de hauteur contient encore la note précédente : la hauteur est revalidée sur les trames
+      // suivantes (la note gardera l'instant de l'attaque)
+      candidate = null
+      candidateCount = 0
+    }
+    checkMute(buffer, now, onset)
+    if (probe && now - probe.at < 30) probe.peak = Math.max(probe.peak, rmsBefore(buffer, buffer.length))
     if (attack) {
       attackPending = true
       swept = new Set()
     }
 
-    const result = rms > threshold() ? detect(buffer) : null
+    // Note fraîchement attaquée : fenêtre courte (dès qu'elle ne contient plus que la nouvelle note)
+    const fresh = detectShort && attackPending && pendingOnsetAt !== null && now - pendingOnsetAt < windowMs
+    if (fresh && rms > threshold() && now - pendingOnsetAt < shortMs) {
+      lastSoundAt = now
+      return { level, freq: null, midiFloat: null } // encore trop tôt : on attend la fenêtre propre
+    }
+    const result = rms > threshold() ? (fresh ? detectShort(buffer.subarray(buffer.length - shortSize)) : detect(buffer)) : null
     if (!result) {
       if (now - lastSoundAt > RELEASE_MS) {
         current = null
@@ -93,15 +198,20 @@ function createVoiceTracker({ sampleRate, bufferSize, minFreq, threshold, onNote
     const previous = current
     // Note attaquée (ou première note après un silence) : validation rapide ; sinon on attend qu'elle tienne
     const legato = Boolean(previous) && !attackPending
-    const stable = legato ? candidateCount >= STABLE_FRAMES && now - candidateSince >= LEGATO_STABLE_MS : candidateCount >= STABLE_FRAMES
+    const stable = legato ? candidateCount >= STABLE_FRAMES && now - candidateSince >= LEGATO_STABLE_MS : candidateCount >= (fresh ? 2 : STABLE_FRAMES)
     if (stable) {
-      const isNew = !previous || previous.midi !== rounded || attack
+      const isNew = !previous || previous.midi !== rounded || attackPending
       current = { midi: rounded, freq: result.freq, cents: (m - rounded) * 100 }
       if (isNew) {
         // Grand glissé sans nouvelle attaque, en passant par les cases intermédiaires
         const slide = legato && isSlide(previous.midi, rounded, swept) ? { from: previous.midi, to: rounded } : null
         const bend = legato && !slide ? detectBend(previous.midi, rounded, now) : null
-        onNote({ ...current, legato, slide, bend })
+        // Instant de la note : son attaque si elle en a une, sinon (lié) le changement de hauteur
+        const at = !legato && pendingOnsetAt !== null ? pendingOnsetAt : candidateSince - windowMs / 2
+        const note = { ...current, legato, slide, bend, at, muted: false }
+        pendingOnsetAt = null
+        if (!legato && !bend) probe = { note, at, peak: Math.max(pendingPeak, rmsBefore(buffer, buffer.length)) }
+        onNote(note)
         attackPending = false
         swept = new Set([rounded])
         glideFrames = 0

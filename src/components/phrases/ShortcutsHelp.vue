@@ -14,6 +14,7 @@ const KEYS = [
   [['Suppr'], 'Supprimer la note sélectionnée'],
   [['⌘', 'Z'], 'Annuler (Maj : rétablir)'],
   [['1', '2', '3'], 'Studio, Entraînement, Progrès'],
+  [['M'], 'Replier / afficher le manche'],
   [['Échap'], 'Arrêter, ou désélectionner'],
   [['?'], 'Afficher / masquer cette aide'],
 ]
