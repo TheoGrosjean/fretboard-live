@@ -341,6 +341,12 @@ const loopLabel = computed(() => {
           <span :key="s.loopEdge.restart ? 'flash' : 'idle'" class="edge edge-left" :class="{ on: s.loopEdge.soon, flash: s.loopEdge.restart }" />
         </template>
       </div>
+
+      <!-- Au bout de la frise : ajouter (ou retirer) une mesure vide pour écrire plus de notes -->
+      <div v-if="s.mode === 'idle' && s.phrase" class="flex shrink-0 flex-col gap-1 pt-11" :style="{ height: rows * ROW + 44 + 'px' }">
+        <button class="bar-btn" :disabled="!s.canAddBar" title="Ajouter une mesure vide au bout (double-clic dedans pour y poser des notes)" @click="s.addBar">+</button>
+        <button v-if="s.canRemoveBar" class="bar-btn" title="Retirer la dernière mesure (vide)" @click="s.removeBar">−</button>
+      </div>
     </div>
   </div>
 </template>
@@ -356,6 +362,9 @@ const loopLabel = computed(() => {
 }
 .tool.is-accent {
   @apply bg-copper-500/15 text-copper-300 ring-copper-400/40 hover:bg-copper-500/25;
+}
+.bar-btn {
+  @apply flex w-6 min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed border-white/15 text-base leading-none text-neutral-400 transition hover:border-copper-400/60 hover:bg-copper-500/10 hover:text-copper-300 disabled:opacity-30 disabled:hover:border-white/15 disabled:hover:bg-transparent disabled:hover:text-neutral-400;
 }
 .loop-chip {
   @apply flex items-center gap-1.5 rounded-full bg-copper-500/15 px-2.5 py-1 text-[11px] tracking-normal text-copper-300 normal-case ring-1 ring-copper-400/40;

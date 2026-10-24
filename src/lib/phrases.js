@@ -68,6 +68,7 @@ export function migratePhrase(p) {
     bestBpm: 0, // meilleur tempo réussi proprement
     zone: null, // case autour de laquelle placer le doigté (null : là où c'est le plus jouable)
     loop: null, // section travaillée en boucle : { from, to } en temps, ou null pour tout le phrasé
+    minBars: null, // mesures ajoutées à la main (vides au bout) : la boucle en a au moins autant
     sessions: [], // [{ at, duration, passes, clean, bestBpm, maxBpm, startBpm }]
     noteStats: {}, // par note (id) : réussite et timing, moyennés au fil des passages
     review: null, // révision espacée : { due, interval, ease, reps, last, q }

@@ -258,7 +258,7 @@ export function usePhraseStudio() {
     const p = phrase.value
     // La lecture d'une prise libre (tempo retrouvé, autres lectures) suit l'historique
     // Copie du tableau : le glisser remplace des notes en place (les notes elles-mêmes ne sont jamais modifiées)
-    return { notes: [...p.notes], lengthBeats: p.lengthBeats, grid: p.grid, beats: p.beats, recordBpm: p.recordBpm, free: freeResult.value, label }
+    return { notes: [...p.notes], lengthBeats: p.lengthBeats, minBars: p.minBars, grid: p.grid, beats: p.beats, recordBpm: p.recordBpm, free: freeResult.value, label }
   }
   /** Empile un état à annuler ; une nouvelle retouche efface ce qui pouvait être rétabli. */
   function remember(state) {
@@ -270,7 +270,7 @@ export function usePhraseStudio() {
     touch()
   }
   function restore(s) {
-    Object.assign(phrase.value, { notes: s.notes, lengthBeats: s.lengthBeats, grid: s.grid, beats: s.beats, recordBpm: s.recordBpm })
+    Object.assign(phrase.value, { notes: s.notes, lengthBeats: s.lengthBeats, minBars: s.minBars ?? null, grid: s.grid, beats: s.beats, recordBpm: s.recordBpm })
     if (freeResult.value || s.free) {
       freeResult.value = s.free ?? null
       if (s.free) metro.setBpm(s.recordBpm)
@@ -413,8 +413,9 @@ export function usePhraseStudio() {
       p.bpm = p.startBpm
       p.bestBpm = 0
       p.noteStats = {}
+      p.minBars = null
     }
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
     punch.value = null
     alignInfo.value = ''
     touch()
@@ -467,7 +468,7 @@ export function usePhraseStudio() {
     p.notes = place(freeNotes(freeOnsetsKept, r))
     p.grid = r.grid
     p.recordBpm = r.bpm
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
     metro.setBpm(r.bpm)
     freeResult.value = { bpm: r.bpm, feel: r.feel, confidence: r.confidence, errorMs: r.errorMs, alternatives: r.alternatives.length ? r.alternatives : (freeResult.value?.alternatives ?? []) }
     touch()
@@ -488,6 +489,7 @@ export function usePhraseStudio() {
     p.loop = null
     p.noteStats = {}
     p.bestBpm = 0
+    p.minBars = null
     const r = inferRhythm(freeOnsetsKept)
     applyFreeReading(r)
     p.startBpm = Math.max(40, r.bpm - 20)
@@ -1051,7 +1053,7 @@ export function usePhraseStudio() {
     commit(label)
     const moved = selectedNote.value !== null ? notes[selectedNote.value] : null
     p.notes = [...notes].sort((a, b) => a.beat - b.beat)
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
     if (moved) selectedNote.value = p.notes.indexOf(moved) // la note sélectionnée a pu changer de rang
   }
   function onFretClick({ string, fret, midi }) {
@@ -1101,7 +1103,7 @@ export function usePhraseStudio() {
     while (occupied(e.beat, -1)) e.beat += e.dur
     const id = uid()
     p.notes = place([...p.notes, { id, midi, beat: e.beat, dur: e.dur, string, fret, locked: true }])
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
     e.ids.push(id)
     e.beat += e.dur
     showPlayed(midi, { string, fret })
@@ -1118,7 +1120,7 @@ export function usePhraseStudio() {
     const n = p.notes.find((m) => m.id === id)
     commit('Saisie')
     p.notes = p.notes.filter((m) => m.id !== id)
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
     if (n) e.beat = n.beat
   }
   watch(mode, (m) => m !== 'idle' && (entry.value = null))
@@ -1178,7 +1180,7 @@ export function usePhraseStudio() {
     commit('Rythme')
     p.grid = grid
     p.notes = all
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
   }
   /** Ajoute une note (case donnée, ou à défaut la même que la note voisine) au temps `beat`. */
   function addNote(beat, string = null, fret = null) {
@@ -1191,7 +1193,7 @@ export function usePhraseStudio() {
     commit('Ajout')
     const id = uid()
     p.notes = place([...p.notes, { id, midi: tuning.value[s] + f, beat: b, dur: step.value, string: s, fret: f, locked: true }])
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
     selectedNote.value = p.notes.findIndex((n) => n.id === id)
   }
   /** Ajoute une note juste après la note sélectionnée (ou à la fin). */
@@ -1206,7 +1208,7 @@ export function usePhraseStudio() {
     const p = phrase.value
     commit('Suppression')
     p.notes = p.notes.filter((_, i) => !inSelection(i))
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
     selectedNote.value = null
   }
   function autoPlace() {
@@ -1272,7 +1274,7 @@ export function usePhraseStudio() {
     commit('Grille')
     p.grid = grid
     p.notes = requantize(p.notes, grid, p.recordBpm).sort((a, b) => a.beat - b.beat)
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
     alignInfo.value = ''
   }
 
@@ -1315,7 +1317,7 @@ export function usePhraseStudio() {
     const id = p.notes[selectedNote.value]?.id
     remember(before)
     p.notes = before.label === 'Corde' ? place(p.notes) : [...p.notes].sort((a, b) => a.beat - b.beat)
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
     if (id) selectedNote.value = p.notes.findIndex((n) => n.id === id)
     touch()
   }
@@ -1366,7 +1368,7 @@ export function usePhraseStudio() {
     const copies = []
     for (let k = 0; k < times; k++) for (const n of clip.notes) copies.push({ ...n, id: uid(), beat: at + k * clip.length + n.beat, raw: undefined })
     p.notes = place([...moved, ...copies])
-    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
+    fitLength(p)
     selectedNote.value = null
   }
   function copySection() {
@@ -1394,6 +1396,34 @@ export function usePhraseStudio() {
     insertClip(at, clip, 1, 'Collage')
     if (entry.value) entry.value.beat += clip.length
     say('Motif collé')
+  }
+
+  // ---------- Longueur : des mesures vides au bout, pour écrire plus loin ----------
+  const MAX_BARS = 32
+  /** Durée de la boucle : les mesures qui contiennent les notes, au moins celles ajoutées à la main. */
+  function fitLength(p = phrase.value) {
+    p.lengthBeats = Math.max(loopLength(p.notes, p.beats, p.grid), (p.minBars ?? 0) * p.beats)
+  }
+  const canAddBar = computed(() => mode.value === 'idle' && !!phrase.value && phrase.value.lengthBeats / phrase.value.beats < MAX_BARS)
+  // On ne retire qu'une mesure vide, au bout
+  const canRemoveBar = computed(() => {
+    const p = phrase.value
+    return mode.value === 'idle' && !!p && p.lengthBeats > p.beats && p.lengthBeats - p.beats >= loopLength(p.notes, p.beats, p.grid) - 1e-6
+  })
+  function addBar() {
+    if (!canAddBar.value) return
+    const p = phrase.value
+    commit('Mesure ajoutée')
+    p.minBars = Math.round(p.lengthBeats / p.beats) + 1
+    fitLength(p)
+  }
+  function removeBar() {
+    if (!canRemoveBar.value) return
+    const p = phrase.value
+    commit('Mesure retirée')
+    p.minBars = Math.round(p.lengthBeats / p.beats) - 1
+    fitLength(p)
+    if (p.loop && p.loop.to > p.lengthBeats) setLoop(p.loop.from, p.lengthBeats)
   }
 
   // ---------- Section travaillée en boucle ----------
@@ -1662,6 +1692,11 @@ export function usePhraseStudio() {
     future,
     undo,
     redo,
+    // longueur
+    canAddBar,
+    canRemoveBar,
+    addBar,
+    removeBar,
     // section
     setLoop,
     clearLoop,
