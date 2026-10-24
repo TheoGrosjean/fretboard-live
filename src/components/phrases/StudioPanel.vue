@@ -3,7 +3,7 @@
 // (doigté, transposition) et la note sélectionnée (technique, power chord).
 import { computed, inject } from 'vue'
 import { STUDIO_KEY } from '../../composables/usePhraseStudio'
-import { ZONES, bendLabel, noteLength } from '../../lib/phrases'
+import { GRIDS, GRID_MIX, ZONES, bendLabel, noteLength } from '../../lib/phrases'
 import { noteName } from '../../lib/music'
 import { beatLabel, durationLabel } from './format'
 
@@ -13,6 +13,22 @@ const free = computed(() => s.mode === 'free')
 const busy = computed(() => s.mode === 'practice' || s.mode === 'listen' || s.mode === 'calibrate')
 const freeSeconds = computed(() => (free.value ? Math.floor((s.clock - s.freeStart) / 1000) : 0))
 const sel = computed(() => s.selected)
+const multi = computed(() => (s.selection?.count ?? 0) > 1)
+const RHYTHMS = GRIDS.filter((g) => g.n !== GRID_MIX)
+const ONE = { 1: 'une noire', 2: 'une croche', 3: 'une croche de triolet', 4: 'une double croche' }
+// Rythme actuel des notes sélectionnées (si elles se suivent régulièrement)
+const currentSub = computed(() => {
+  const r = s.selection
+  if (!r) return null
+  const notes = s.phrase.notes
+  const gap = r.count > 1 ? notes[r.from + 1].beat - notes[r.from].beat : noteLength(notes, r.from, s.phrase.lengthBeats)
+  for (let i = r.from + 1; i <= r.to; i++) if (Math.abs(notes[i].beat - notes[i - 1].beat - gap) > 1e-6) return null
+  return RHYTHMS.find((g) => Math.abs(gap - 1 / g.n) < 1e-6)?.n ?? null
+})
+const rangeText = computed(() => {
+  const r = s.selection
+  return r ? `${beatLabel(s.phrase.notes[r.from].beat, s.phrase.beats)} → ${beatLabel(s.phrase.notes[r.to].beat, s.phrase.beats)}` : ''
+})
 const selDur = computed(() => (sel.value ? noteLength(s.phrase.notes, s.selectedNote, s.phrase.lengthBeats) : 0))
 const hasLocked = computed(() => s.phrase?.notes.some((n) => n.locked))
 const loopText = computed(() => (s.phrase?.loop ? `${beatLabel(s.phrase.loop.from, s.phrase.beats)} → ${beatLabel(s.phrase.loop.to, s.phrase.beats)}` : ''))
@@ -135,8 +151,31 @@ const confidence = computed(() => (s.freeResult ? Math.round(s.freeResult.confid
         </button>
       </p>
 
+      <!-- Plusieurs notes sélectionnées (Maj + clic) -->
+      <div v-if="multi && s.editable" class="inspector">
+        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <b class="text-xl text-white">{{ s.selection.count }} notes</b>
+          <span class="text-sm text-neutral-400">n° {{ s.selection.from + 1 }} à {{ s.selection.to + 1 }}</span>
+          <span class="text-sm text-neutral-500">· mesure {{ rangeText }}</span>
+          <span class="ml-auto flex gap-1.5">
+            <span class="flex items-center">
+              <button class="tool rounded-r-none" title="Un demi-ton plus bas" @click="s.shiftPitch(-1)">−½</button>
+              <button class="tool rounded-none border-x border-white/5" title="Un demi-ton plus haut" @click="s.shiftPitch(1)">+½</button>
+              <button class="tool rounded-none border-r border-white/5" title="Une octave plus bas" @click="s.shiftPitch(-12)">−8ve</button>
+              <button class="tool rounded-l-none" title="Une octave plus haut" @click="s.shiftPitch(12)">+8ve</button>
+            </span>
+            <button class="tool text-rose-300" title="Supprimer ces notes (Suppr)" @click="s.deleteNote">Supprimer</button>
+            <button class="tool" title="Désélectionner (Échap)" @click="s.selectedNote = null">✕</button>
+          </span>
+        </div>
+        <div class="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+          <span class="mr-1 font-semibold tracking-widest text-neutral-500 uppercase">Rythme</span>
+          <button v-for="r in RHYTHMS" :key="r.n" class="tool" :class="{ 'is-accent': currentSub === r.n }" :title="`Les ${s.selection.count} notes se suivent en ${r.name.toLowerCase()} ; la suite du phrasé se décale d'autant`" @click="s.setRhythm(r.n)">{{ r.name }}</button>
+        </div>
+        <p class="mt-2 text-[11px] text-neutral-600">Maj + clic sur une autre note de la tablature : étendre ou réduire la sélection · Échap : désélectionner</p>
+      </div>
       <!-- Note sélectionnée -->
-      <div v-if="sel && s.editable" class="inspector">
+      <div v-else-if="sel && s.editable" class="inspector">
         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span class="text-xs font-semibold text-neutral-500">Note {{ s.selectedNote + 1 }}</span>
           <b class="text-xl text-white">{{ noteName(sel.midi, s.notation, true) }}{{ sel.chord === 'power' ? '5' : '' }}</b>
@@ -165,7 +204,11 @@ const confidence = computed(() => (s.freeResult ? Math.round(s.freeResult.confid
           <span class="mx-1 h-4 w-px bg-white/10" />
           <button class="tool" :class="{ 'is-accent': sel.chord === 'power' }" title="Fondamentale + quinte (+ octave)" @click="s.togglePower">Power chord</button>
         </div>
-        <p class="mt-2 text-[11px] text-neutral-600">Clique une case du manche pour changer la note · ← → : la déplacer d'une case · glisse-la sur la tablature (temps ↔, corde ↕)</p>
+        <div class="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+          <span class="mr-1 font-semibold tracking-widest text-neutral-500 uppercase">Rythme</span>
+          <button v-for="r in RHYTHMS" :key="r.n" class="tool" :class="{ 'is-accent': currentSub === r.n }" :title="`La note dure ${ONE[r.n]} ; la suite du phrasé se décale d'autant`" @click="s.setRhythm(r.n)">{{ r.name }}</button>
+        </div>
+        <p class="mt-2 text-[11px] text-neutral-600">Clique une case du manche pour changer la note · ← → : la déplacer d'une case · glisse-la sur la tablature (temps ↔, corde ↕) · Maj + clic sur une autre note : en sélectionner plusieurs</p>
       </div>
       <p v-else-if="s.editable" class="mt-4 flex flex-wrap items-center gap-3 text-xs text-neutral-600">
         Clique une note, sur la tablature ou sur le manche, pour la modifier. Double-clic sur une case vide de la tablature : ajouter une note.

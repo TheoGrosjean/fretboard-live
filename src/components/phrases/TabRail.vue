@@ -132,6 +132,7 @@ function beatsFromPx(px) {
 function onPillDown(e, p) {
   if (!s.editable || p.state === 'out') return
   e.preventDefault()
+  if (e.shiftKey) return s.extendSelection(p.i) // Maj + clic : plusieurs notes à la suite
   try {
     e.currentTarget.setPointerCapture(e.pointerId) // le glisser continue même si le pointeur sort de la note
   } catch {
@@ -310,7 +311,7 @@ const loopLabel = computed(() => {
             class="pill"
             :class="[`is-${p.state}`, p.heat, { power: p.power }]"
             :style="{ left: `calc(${p.left}% + 1px)`, width: `calc(${p.width}% - 2px)`, top: p.top + 2 + 'px', height: ROW - 4 + 'px' }"
-            :title="`Note ${p.i + 1} · ${p.name}${p.n.string !== undefined ? ` · corde ${p.n.string + 1}, case ${p.n.fret}` : ''}${s.editable ? ' — glisse : temps ↔, corde ↕ · double-clic : écouter' : ''}`"
+            :title="`Note ${p.i + 1} · ${p.name}${p.n.string !== undefined ? ` · corde ${p.n.string + 1}, case ${p.n.fret}` : ''}${s.editable ? ' — glisse : temps ↔, corde ↕ · Maj + clic : sélectionner jusqu’ici · double-clic : écouter' : ''}`"
             @pointerdown="onPillDown($event, p)"
             @pointermove="onPillMove"
             @pointerup="onPillUp"

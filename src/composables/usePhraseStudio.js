@@ -10,7 +10,7 @@ import { useAudioInput } from './useAudioInput'
 import { useMetronome } from './useMetronome'
 import { DEFAULT_BODY_FINISH } from '../lib/noteStyles'
 import { findPositions, findTuning, noteName } from '../lib/music'
-import { GRID_MIX, bendLabel, exportPhrases, gridStep, importPhrases, loopLength, newPhrase, noteLength, placeNotes, powerShape, quantize, stepBeat, techOf, uid } from '../lib/phrases'
+import { GRID_MIX, bendLabel, exportPhrases, gridStep, importPhrases, loopLength, newPhrase, noteLength, onGrid, placeNotes, powerShape, quantize, stepBeat, techOf, uid } from '../lib/phrases'
 import { busy, flushSave, openRequest, phrases, removePhrase } from './phraseStore'
 import { autoAlign, inferRhythm, requantize, shiftAll, smartQuantize } from '../lib/phraseRhythm'
 import {
@@ -922,7 +922,7 @@ export function usePhraseStudio() {
   function noteState(i) {
     const n = shownNotes.value[i]
     if (!n) return 'idle'
-    if (selectedNote.value === i && mode.value === 'idle') return 'selected'
+    if (mode.value === 'idle' && inSelection(i)) return 'selected'
     if (mode.value === 'practice') {
       if (!inSection(n)) return 'hidden'
       if (demoPlaying.value) {
@@ -1021,6 +1021,22 @@ export function usePhraseStudio() {
     if (mode.value !== 'idle') return
     selectedNote.value = selectedNote.value === i ? null : i
   }
+  // Plusieurs notes à la suite : Maj + clic étend la sélection depuis la note sélectionnée
+  const selectionEnd = ref(null) // autre bout de la sélection, ou null (une seule note)
+  watch(selectedNote, () => (selectionEnd.value = null), { flush: 'sync' })
+  /** Notes sélectionnées : { from, to, count } (indices), ou null. */
+  const selection = computed(() => {
+    const a = selectedNote.value
+    if (a === null || !phrase.value?.notes[a]) return null
+    const b = Math.min(selectionEnd.value ?? a, phrase.value.notes.length - 1)
+    return { from: Math.min(a, b), to: Math.max(a, b), count: Math.abs(a - b) + 1 }
+  })
+  const inSelection = (i) => !!selection.value && i >= selection.value.from && i <= selection.value.to
+  function extendSelection(i) {
+    if (mode.value !== 'idle') return
+    if (selectedNote.value === null) selectedNote.value = i
+    else selectionEnd.value = i === selectedNote.value ? null : i
+  }
   const selected = computed(() => (selectedNote.value !== null ? (phrase.value?.notes[selectedNote.value] ?? null) : null))
   const alternates = computed(() => {
     const n = selected.value
@@ -1115,14 +1131,54 @@ export function usePhraseStudio() {
     selectedNote.value = phrase.value.notes.findIndex((m) => m.id === n.id)
   }
   /** Monte ou descend la note sélectionnée de `semis` demi-tons (même corde si possible). */
+  /** Monte ou descend les notes sélectionnées de `semis` demi-tons (même corde si possible). */
   function shiftPitch(semis) {
-    const i = selectedNote.value
-    const n = phrase.value.notes[i]
-    const midi = n.midi + semis
-    const fret = n.fret + semis
-    if (fret >= 0 && fret <= frets.value) return setNoteAt(i, { string: n.string, fret, midi })
-    const pos = nearestPosition(midi, n)
-    if (pos) setNoteAt(i, { ...pos, midi })
+    const { from, to } = selection.value
+    const notes = phrase.value.notes
+    const moved = []
+    for (let i = from; i <= to; i++) {
+      const n = notes[i]
+      const midi = n.midi + semis
+      const fret = n.fret + semis
+      const pos = fret >= 0 && fret <= frets.value ? { string: n.string, fret } : nearestPosition(midi, n)
+      if (!pos) return say('Hors du manche : impossible d’aller plus loin', 'muted')
+      moved.push({ ...n, midi, string: pos.string, fret: pos.fret, locked: true })
+    }
+    commit('Hauteur')
+    phrase.value.notes = place(notes.map((n, k) => (k >= from && k <= to ? moved[k - from] : n)))
+  }
+  /**
+   * Rythme des notes sélectionnées : elles se suivent en noires (1), croches (2), triolets (3) ou doubles
+   * croches (4) à partir de la première ; la suite du phrasé avance ou recule d'autant.
+   */
+  function setRhythm(sub) {
+    const p = phrase.value
+    const { from, to } = selection.value
+    const notes = p.notes
+    const step = 1 / sub
+    // Départ sur la nouvelle subdivision (sans passer avant la note précédente)
+    let start = Math.round(notes[from].beat * sub) / sub
+    if (from > 0 && start <= notes[from - 1].beat + 1e-6) start = Math.ceil(notes[from].beat * sub - 1e-6) / sub
+    const run = notes.slice(from, to + 1).map((n, k) => ({ ...n, beat: start + k * step, dur: step, raw: undefined }))
+    const shift = (d) => notes.slice(to + 1).map((n) => ({ ...n, beat: n.beat + d, raw: n.raw !== undefined ? n.raw + d : undefined }))
+    // La suite suit la fin des notes réécrites ; si elle tomberait entre deux cases (ou dans un temps à la fois
+    // binaire et ternaire), elle recule moins : le plus petit décalage qui la garde sur une case, la dernière
+    // note réécrite étant alors tenue jusqu'à elle (pas de petit silence)
+    const delta = run.at(-1).beat + step - (notes[to].beat + noteLength(notes, to, p.lengthBeats))
+    let d = delta
+    if (to + 1 < notes.length) {
+      const shifts = [1 / 12, 1 / 4, 1 / 3, 1 / 2, 1].map((u) => Math.ceil(delta / u - 1e-6) * u).sort((a, b) => a - b)
+      d = shifts.find((x) => onGrid([...run, ...shift(x)], GRID_MIX)) ?? Math.ceil(delta - 1e-6)
+      run.at(-1).dur = step + d - delta
+    }
+    const rest = shift(d)
+    const all = [...notes.slice(0, from), ...run, ...rest]
+    // Grille : celle du phrasé si tout y tombe, sinon la plus simple qui convient (mixte en dernier)
+    const grid = [p.grid, 1, 2, 3, 4].find((g) => g !== GRID_MIX && onGrid(all, g)) ?? GRID_MIX
+    commit('Rythme')
+    p.grid = grid
+    p.notes = all
+    p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
   }
   /** Ajoute une note (case donnée, ou à défaut la même que la note voisine) au temps `beat`. */
   function addNote(beat, string = null, fret = null) {
@@ -1149,7 +1205,7 @@ export function usePhraseStudio() {
   function deleteNote() {
     const p = phrase.value
     commit('Suppression')
-    p.notes = p.notes.filter((_, i) => i !== selectedNote.value)
+    p.notes = p.notes.filter((_, i) => !inSelection(i))
     p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
     selectedNote.value = null
   }
@@ -1183,6 +1239,7 @@ export function usePhraseStudio() {
   const occupied = (beat, except) => phrase.value.notes.some((n, k) => k !== except && Math.abs(n.beat - beat) < 1e-6)
   /** Déplace la note sélectionnée d'une case ; sur une case prise, elle échange sa place avec la voisine. */
   function nudge(dir) {
+    if (selection.value.count > 1) return
     const i = selectedNote.value
     const notes = phrase.value.notes
     const beat = stepBeat(notes[i].beat, dir, phrase.value.grid)
@@ -1568,6 +1625,9 @@ export function usePhraseStudio() {
     selectedNote,
     selected,
     selectNote,
+    selection,
+    extendSelection,
+    setRhythm,
     alternates,
     selectedPlayed,
     editable,

@@ -149,6 +149,18 @@ export function beatSubdivision(fractions, grid) {
   return on(6) ? 6 : 12
 }
 
+/** Les notes tombent pile sur la grille (en grille mixte : chaque temps en binaire ou en ternaire, sans mélange). */
+export function onGrid(notes, grid) {
+  if (!notes.every((n) => Math.abs(snapBeat(n.beat, grid) - n.beat) < 1e-6)) return false
+  if (grid !== GRID_MIX) return true
+  const byBeat = new Map()
+  for (const n of notes) {
+    const k = Math.floor(n.beat + 1e-9)
+    byBeat.set(k, [...(byBeat.get(k) ?? []), n.beat - k])
+  }
+  return [...byBeat.values()].every((f) => beatSubdivision(f, GRID_MIX) <= 4)
+}
+
 /**
  * Durée affichée d'une note : sa durée tenue (dur), sans déborder sur la note suivante ; sans durée connue
  * (anciens enregistrements), jusqu'à la note suivante, et un temps au plus pour la dernière.
