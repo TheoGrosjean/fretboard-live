@@ -26,8 +26,8 @@ import { formatScore } from '../finishers/useCountUp'
 import ComboAnnouncement from '../ComboAnnouncement.vue'
 import SpotifyPicker from './SpotifyPicker.vue'
 import FinisherFight from '../finishers/FinisherFight.vue'
-import Icon from '../Icon.vue'
 import { ampOn, soloPlayer } from '../../lib/ampStatus'
+import { persisted } from '../../lib/storage'
 
 const props = defineProps({
   scaleTitle: { type: String, required: true },
@@ -51,25 +51,15 @@ const props = defineProps({
 const emit = defineEmits(['close', 'start', 'update:root', 'update:scaleId'])
 
 // ---------- Réglages ----------
-function stored(key, initial) {
-  try {
-    const v = localStorage.getItem(`fb.game.${key}`)
-    return v !== null ? JSON.parse(v) : initial
-  } catch {
-    return initial
-  }
-}
-const mode = ref(stored('mode', 'libre'))
-const duration = ref(stored('duration', 60))
-const hard = ref(stored('hard', false)) // noms des notes masqués sur le manche
+const mode = persisted('game.mode', 'libre')
+const duration = persisted('game.duration', 60)
+const hard = persisted('game.hard', false) // noms des notes masqués sur le manche
 // Jam ping-pong
-const jamVariant = ref(stored('jamVariant', 'duel'))
-// Relais mémorisé qui n'existe plus (anciens 4 s / 8 s) : 16 s
-const jamRelay = ref(RELAYS.some((r) => r.id === stored('jamRelay', '16')) ? stored('jamRelay', '16') : '16')
-const jamTurns = ref(stored('jamTurns', 4))
-const jamSolo = ref(stored('jamSolo', false)) // un seul joueur à la fois : l'autre est coupé dans l'ampli
-const SETTINGS = { mode, duration, hard, jamVariant, jamRelay, jamTurns, jamSolo }
-watch(Object.values(SETTINGS), () => Object.entries(SETTINGS).forEach(([k, r]) => localStorage.setItem(`fb.game.${k}`, JSON.stringify(r.value))))
+const jamVariant = persisted('game.jamVariant', 'duel')
+const jamRelay = persisted('game.jamRelay', '16')
+if (!RELAYS.some((r) => r.id === jamRelay.value)) jamRelay.value = '16' // relais qui n'existe plus (anciens 4 s / 8 s)
+const jamTurns = persisted('game.jamTurns', 4)
+const jamSolo = persisted('game.jamSolo', false) // un seul joueur à la fois : l'autre est coupé dans l'ampli
 
 const track = computed(() => props.spotify?.track.value ?? null) // morceau en cours sur le lecteur
 // Mode Morceau : il suffit d'être connecté à Spotify, le morceau se choisit dans le menu

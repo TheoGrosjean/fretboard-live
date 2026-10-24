@@ -9,6 +9,7 @@ import { createTrackSession, recordEvent, sessionResult } from './lib/finisher'
 import Icon from './components/Icon.vue'
 import Dropdown from './components/ui/Dropdown.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
+import ListenButton from './components/ListenButton.vue'
 import SpotifyPlayer from './components/SpotifyPlayer.vue'
 import LoaderNeck from './components/loaders/LoaderNeck.vue'
 import GameMode from './components/game/GameMode.vue'
@@ -30,14 +31,7 @@ import { positionKey, scaleBoxes } from './lib/boxes'
 import { CHORDS, chordShapes, scaleChords } from './lib/chords'
 import { practiceRequest } from './lib/practice'
 import { PHRASE_GAP_MS, PHRASE_LENGTH, REVISABLE, bestFingering, handFrom, rootBox } from './lib/fingering'
-
-// ---------- Réglages persistés ----------
-function persisted(key, initial) {
-  const stored = localStorage.getItem(`fb.${key}`)
-  const r = ref(stored !== null ? JSON.parse(stored) : initial)
-  watch(r, (v) => localStorage.setItem(`fb.${key}`, JSON.stringify(v)))
-  return r
-}
+import { persisted, reloadPersisted } from './lib/storage'
 
 const settingsOpen = ref(false) // panneau ⚙ (entrée audio, guitare, affichage)
 const props = defineProps({ skipSplash: { type: Boolean, default: false } })
@@ -62,12 +56,7 @@ const tuningId = persisted('tuning', 'standard')
 const tuning = computed(() => findTuning(tuningId.value).notes)
 
 // Réglages changés ailleurs (page Phrasés, ou compte synchronisé depuis un autre appareil) : on les relit
-function reloadSettings() {
-  for (const [key, r] of Object.entries({ tuning: tuningId, notation, labelMode, frets, showAlternates, bodyFinish, matchHead })) {
-    const v = localStorage.getItem(`fb.${key}`)
-    if (v !== null && JSON.stringify(r.value) !== v) r.value = JSON.parse(v)
-  }
-}
+const reloadSettings = () => reloadPersisted({ tuning: tuningId, notation, labelMode, frets, showAlternates, bodyFinish, matchHead })
 addEventListener('fb:settings', reloadSettings)
 
 const pattern = computed(() => {
@@ -278,7 +267,10 @@ onDeactivated(() => {
   listen(false)
   active.value = false
 })
-onBeforeUnmount(() => listen(false))
+onBeforeUnmount(() => {
+  listen(false)
+  removeEventListener('fb:settings', reloadSettings)
+})
 
 // ---------- Notes jouées ----------
 const played = shallowRef(null) // { midi, string, fret }
@@ -417,10 +409,6 @@ const alternates = computed(() => {
 })
 
 const playedInfo = computed(() => (played.value ? overlay.value.get(pitchClass(played.value.midi)) : null))
-
-function toggleAudio() {
-  audio.running.value ? audio.stop() : audio.start()
-}
 </script>
 
 <template>
@@ -492,19 +480,7 @@ function toggleAudio() {
     <!-- ========== Contenu principal ========== -->
     <!-- Dans la barre du haut : écoute de la guitare, réglages, et l'entrée du mode jeu, bien en vue -->
     <Teleport v-if="active" defer to="#topbar-actions">
-      <button
-        class="listen-btn"
-        :class="{ on: audio.running.value, err: audio.error.value }"
-        :title="audio.error.value || (audio.running.value ? 'Arrêter l’écoute de la guitare' : 'Écouter la guitare')"
-        @click="toggleAudio"
-      >
-        <Icon name="mic" class="size-4" />
-        <span class="max-sm:hidden">{{ audio.running.value ? 'Écoute' : 'Écouter' }}</span>
-        <!-- Mini vu-mètre -->
-        <span v-if="audio.running.value" class="relative h-1.5 w-8 overflow-hidden rounded-full bg-white/10">
-          <span class="absolute inset-y-0 left-0 rounded-full bg-copper-400 transition-[width] duration-75" :style="{ width: audio.level.value * 100 + '%' }" />
-        </span>
-      </button>
+      <ListenButton :audio="audio" />
       <button class="gear-btn" :class="{ on: settingsOpen }" title="Réglages : entrée audio, guitare, affichage" @click="settingsOpen = !settingsOpen">
         <Icon name="sliders" class="size-5" />
       </button>
@@ -671,24 +647,10 @@ function toggleAudio() {
   </div>
 </template>
 
+<!-- Non scopé : title-pick habille aussi le bouton interne de Dropdown (button-class) -->
 <style>
 @reference "./style.css";
 
-.field {
-  @apply w-full rounded-lg bg-neutral-800 px-3 py-2 text-sm text-neutral-200 ring-1 ring-white/5 outline-none focus:ring-copper-400/60;
-}
-.field-label {
-  @apply mb-1 block text-xs text-neutral-500;
-}
-.segmented {
-  @apply grid gap-1 rounded-xl bg-neutral-800 p-1;
-}
-.segmented > button {
-  @apply rounded-lg py-1.5 text-sm font-medium text-neutral-400 transition hover:text-neutral-200;
-}
-.segmented > button.is-active {
-  @apply bg-neutral-200 text-neutral-950;
-}
 .play-cta {
   @apply relative flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm sm:gap-2 sm:px-5 font-black tracking-wider text-white italic transition hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0;
   background: linear-gradient(180deg, var(--color-copper-400), var(--color-copper-600));
@@ -727,23 +689,6 @@ function toggleAudio() {
     animation: none;
   }
 }
-/* ---------- Barre du haut : écoute et réglages ---------- */
-.listen-btn {
-  @apply flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-neutral-300 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-white;
-}
-.listen-btn.on {
-  @apply bg-copper-500/15 text-copper-300 ring-copper-400/40;
-}
-.listen-btn.err {
-  @apply text-rose-300 ring-rose-400/40;
-}
-.gear-btn {
-  @apply flex size-9 items-center justify-center rounded-xl text-neutral-400 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-white;
-}
-.gear-btn.on {
-  @apply bg-white/10 text-white;
-}
-
 /* ---------- Titre cliquable ---------- */
 .type-tab {
   @apply relative pb-0.5 text-neutral-500 transition hover:text-neutral-300;

@@ -1,22 +1,26 @@
 <script setup>
-// Onglets par adresse : /#profil (compte), /#phrases (entraînement de phrasés), /#theorie (cours), /#ampli (simulateur d'ampli), /#compare (finitions du corps), sinon le manche.
+// Onglets par adresse : /#profil (compte), /#phrases (entraînement de phrasés), /#theorie (cours), /#ampli (simulateur d'ampli), sinon le manche.
 // Les pages restent en mémoire (KeepAlive) : l'ampli allumé continue de jouer sur le Manche et en mode jeu.
-import { computed, onBeforeUnmount, shallowRef } from 'vue'
+// Le Manche est chargé tout de suite, les autres pages à la demande, puis en tâche de fond une fois le site affiché.
+import { computed, defineAsyncComponent, onBeforeUnmount, shallowRef } from 'vue'
 import App from './App.vue'
-import Amp from './Amp.vue'
-import Compare from './Compare.vue'
-import Phrases from './Phrases.vue'
-import Profile from './Profile.vue'
-import Theory from './Theory.vue'
 import TopBar from './components/TopBar.vue'
 
-const PAGES = { '#profil': Profile, '#phrases': Phrases, '#theorie': Theory, '#ampli': Amp, '#compare': Compare }
+const LOADERS = {
+  '#profil': () => import('./Profile.vue'),
+  '#phrases': () => import('./Phrases.vue'),
+  '#theorie': () => import('./Theory.vue'),
+  '#ampli': () => import('./Amp.vue'),
+}
+const PAGES = Object.fromEntries(Object.entries(LOADERS).map(([hash, load]) => [hash, defineAsyncComponent(load)]))
 const pageFor = (hash) => PAGES[hash] ?? App
 const page = shallowRef(pageFor(location.hash))
 // L'animation de chargement du manche ne se joue qu'à l'ouverture du site sur le Manche
 const skipSplash = page.value !== App
+const later = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 1500))
+later(() => Object.values(LOADERS).forEach((load) => load()))
 
-const TAB_IDS = new Map([[App, 'manche'], [Phrases, 'phrases'], [Profile, 'profil'], [Theory, 'theorie'], [Amp, 'ampli']])
+const TAB_IDS = new Map([[App, 'manche'], ...Object.entries(PAGES).map(([hash, c]) => [c, hash.slice(1)])]) // '#phrases' -> 'phrases'
 const current = computed(() => TAB_IDS.get(page.value) ?? '')
 
 // Changement d'onglet : la barre du haut (TopBar) a lancé le fondu de sortie (.page-leave), on bascule puis fondu d'entrée

@@ -350,7 +350,7 @@ const loopText = computed(() => (p.value.loop ? `${beatLabel(p.value.loop.from, 
   @apply mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-400/[0.06] px-4 py-2.5 text-sm text-neutral-300 ring-1 ring-amber-300/25;
 }
 .segmented {
-  @apply flex rounded-xl bg-neutral-800 p-1;
+  @apply flex gap-1 rounded-xl bg-neutral-800 p-1;
 }
 .segmented button {
   @apply rounded-lg px-3 py-1.5 text-xs font-bold text-neutral-400 transition hover:text-white disabled:opacity-50;

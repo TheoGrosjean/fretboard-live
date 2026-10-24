@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue'
+import { persisted } from '../lib/storage'
 
 /**
  * Moteur du métronome : tempo, mesure, accent, subdivision, et l'horloge audio qui programme les clics.
@@ -41,18 +42,8 @@ export const CLICK_SOUNDS = [
   { id: 'hat', label: 'Charleston' },
   { id: 'cowbell', label: 'Cloche' },
 ]
-const SOUND_KEY = 'fb.metronome.sound'
-export const clickSound = ref(
-  (() => {
-    try {
-      const v = JSON.parse(localStorage.getItem(SOUND_KEY)) ?? 'wood'
-      return v === 'clave' ? 'drums' : v // les claves ont laissé la place à la batterie
-    } catch {
-      return 'wood'
-    }
-  })(),
-)
-watch(clickSound, (v) => localStorage.setItem(SOUND_KEY, JSON.stringify(v)))
+export const clickSound = persisted('metronome.sound', 'wood')
+if (clickSound.value === 'clave') clickSound.value = 'drums' // les claves ont laissé la place à la batterie
 
 const noiseBuffers = new WeakMap() // un bruit blanc court par contexte audio
 function noiseOf(ctx) {
@@ -174,22 +165,11 @@ export function previewClick(sound) {
 }
 
 export function useMetronome({ storageKey = 'metronome' } = {}) {
-  function stored(key, initial) {
-    try {
-      const v = localStorage.getItem(`fb.${storageKey}.${key}`)
-      return v !== null ? JSON.parse(v) : initial
-    } catch {
-      return initial
-    }
-  }
-  const bpm = ref(stored('bpm', 90))
-  const beats = ref(stored('beats', 4)) // temps par mesure
-  const accent = ref(stored('accent', true))
-  const volume = ref(stored('volume', 0.7))
-  const subdiv = ref(stored('subdiv', 1)) // clics par temps : 1 noire, 2 croches, 3 triolet, 4 doubles croches
-  watch([bpm, beats, accent, volume, subdiv], () => {
-    for (const [key, r] of Object.entries({ bpm, beats, accent, volume, subdiv })) localStorage.setItem(`fb.${storageKey}.${key}`, JSON.stringify(r.value))
-  })
+  const bpm = persisted(`${storageKey}.bpm`, 90)
+  const beats = persisted(`${storageKey}.beats`, 4) // temps par mesure
+  const accent = persisted(`${storageKey}.accent`, true)
+  const volume = persisted(`${storageKey}.volume`, 0.7)
+  const subdiv = persisted(`${storageKey}.subdiv`, 1) // clics par temps : 1 noire, 2 croches, 3 triolet, 4 doubles croches
 
   const clamp = (v) => Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(v)))
   const setBpm = (v) => (bpm.value = clamp(v))

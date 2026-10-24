@@ -202,10 +202,6 @@ export const ZONES = [
   { fret: 15, label: 'Cases 13–17' },
 ]
 
-/** Le phrasé transposé de `semis` demi-tons (positions recalculées). */
-export const transposeNotes = (notes, semis, tuning, frets, opts) =>
-  semis ? placeNotes(notes.map((n) => ({ ...n, midi: n.midi + semis, locked: false })), tuning, frets, opts) : notes
-
 /** Contour mélodique pour une vignette : points { x, y } dans [0, 1]. */
 export function contour(notes, lengthBeats) {
   if (!notes.length) return []

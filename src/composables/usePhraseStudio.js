@@ -11,13 +11,12 @@ import { useMetronome } from './useMetronome'
 import { DEFAULT_BODY_FINISH } from '../lib/noteStyles'
 import { findPositions, findTuning, noteName } from '../lib/music'
 import { GRID_MIX, bendLabel, exportPhrases, gridStep, importPhrases, loopLength, newPhrase, noteLength, placeNotes, powerShape, quantize, stepBeat, techOf, uid } from '../lib/phrases'
-import { busy, flushSave, openRequest, phrases, removePhrase, sync, syncNow } from './phraseStore'
+import { busy, flushSave, openRequest, phrases, removePhrase } from './phraseStore'
 import { autoAlign, inferRhythm, requantize, shiftAll, smartQuantize } from '../lib/phraseRhythm'
 import {
   alignPass,
   burstTempo,
   hardSpot,
-  isDue,
   latencyCorrection,
   masteredTempo,
   mastery,
@@ -36,26 +35,9 @@ import {
   updateNoteStats,
 } from '../lib/phraseCoach'
 import { pluck, pluckTimed, pluckVoice } from '../lib/pluck'
+import { persisted, reloadPersisted } from '../lib/storage'
 
 export const STUDIO_KEY = 'phrase-studio'
-
-function persisted(key, initial) {
-  let stored = null
-  try {
-    stored = localStorage.getItem(`fb.${key}`)
-  } catch {
-    /* stockage bloqué */
-  }
-  const r = ref(stored !== null ? JSON.parse(stored) : initial)
-  watch(r, (v) => {
-    try {
-      localStorage.setItem(`fb.${key}`, JSON.stringify(v))
-    } catch {
-      /* stockage plein ou bloqué */
-    }
-  })
-  return r
-}
 
 // Les notes sont datées à leur attaque (voir useAudioInput) ; leur reconnaissance arrive ensuite, jusqu'à
 // ~140 ms plus tard : on attend ce délai avant de déclarer une note ratée
@@ -78,15 +60,10 @@ export function usePhraseStudio() {
   const matchHead = persisted('matchHead', false)
   const tuning = computed(() => findTuning(tuningId.value).notes)
   // Le Manche a pu changer ces réglages pendant qu'on était ailleurs : on les relit en revenant
-  function reloadShared() {
-    const refs = { tuning: tuningId, notation, labelMode, frets, showAlternates, bodyFinish, matchHead, 'phrases.tolerance': toleranceId, 'phrases.requireTech': requireTech, 'phrases.memory': memory, 'phrases.gapClick': gapClick, 'phrases.demo': demo, 'phrases.keyCycle': keyCycle, 'phrases.guideVolume': guideVolume }
-    for (const [key, r] of Object.entries(refs)) {
-      const v = localStorage.getItem(`fb.${key}`)
-      if (v !== null && JSON.stringify(r.value) !== v) r.value = JSON.parse(v)
-    }
-  }
+  const reloadShared = () =>
+    reloadPersisted({ tuning: tuningId, notation, labelMode, frets, showAlternates, bodyFinish, matchHead, 'phrases.tolerance': toleranceId, 'phrases.requireTech': requireTech, 'phrases.memory': memory, 'phrases.gapClick': gapClick, 'phrases.demo': demo, 'phrases.keyCycle': keyCycle, 'phrases.guideVolume': guideVolume })
   // Préférences reçues du compte (autre appareil)
-  addEventListener('fb:settings', () => reloadShared())
+  addEventListener('fb:settings', reloadShared)
 
   // ---------- Préférences d'entraînement ----------
   // Calage : délai d'entrée (interface audio -> navigateur). Les notes étant datées à leur attaque, il ne couvre
@@ -239,6 +216,15 @@ export function usePhraseStudio() {
 
   /** Instant d'une note entendue, en temps sur la grille du métronome : son attaque, moins le délai d'entrée. */
   const heardBeat = (n) => metro.beatAt((n?.at ?? performance.now()) - latency.value)
+  /** Bend sur la note tenue : elle reste la note attaquée (même case) ; on retient l'amplitude du tiré, et le relâché. */
+  function bendHeld(held, midi) {
+    if (!held) return
+    const steps = midi - held.midi
+    if (steps > 0) held.bend = Math.max(held.bend ?? 0, steps)
+    else if (held.bend) held.release = true
+  }
+  /** Note arrivée sans nouvelle attaque depuis la précédente : slide, ou lié (hammer-on / pull-off). */
+  const techAfter = (held, n) => (held ? (n.slide ? 'slide' : n.legato ? 'legato' : null) : null)
   /** Palm mute : décidé par la détection peu après l'attaque ; reporté sur la note en cours d'enregistrement. */
   function settleMute() {
     if (!holding?.n?.muted) return
@@ -274,9 +260,13 @@ export function usePhraseStudio() {
     // Copie du tableau : le glisser remplace des notes en place (les notes elles-mêmes ne sont jamais modifiées)
     return { notes: [...p.notes], lengthBeats: p.lengthBeats, grid: p.grid, beats: p.beats, recordBpm: p.recordBpm, free: freeResult.value, label }
   }
-  function commit(label) {
-    past.value = [...past.value.slice(-(HISTORY_SIZE - 1)), snapshot(label)]
+  /** Empile un état à annuler ; une nouvelle retouche efface ce qui pouvait être rétabli. */
+  function remember(state) {
+    past.value = [...past.value.slice(-(HISTORY_SIZE - 1)), state]
     future.value = []
+  }
+  function commit(label) {
+    remember(snapshot(label))
     touch()
   }
   function restore(s) {
@@ -317,7 +307,7 @@ export function usePhraseStudio() {
   const takes = ref([]) // notes de la prise en cours
   const punch = ref(null) // section réenregistrée : { from, to } en temps, ou null
   let recordSnapshot = null
-  let holding = null // note en cours d'enregistrement : { id, raw }
+  let holding = null // note en cours d'enregistrement : { id, raw (prise sur le clic), n (note détectée) }
   const recordGrid = computed(() => (punch.value ? phrase.value.grid : metro.subdiv.value))
 
   async function startRecording({ section = false } = {}) {
@@ -350,23 +340,16 @@ export function usePhraseStudio() {
     const raw = b - countIn.value + offset // instant réellement joué : sert au calage automatique
     if (punch.value && (raw < punch.value.from - 0.25 || raw >= punch.value.to)) return
     const held = holding && takes.value.find((t) => t.id === holding.id)
-    // Bend : la note tirée reste la note attaquée (même case) ; on retient l'amplitude du tiré, et le relâché
     if (n.bend) {
-      if (held) {
-        const steps = n.midi - held.midi
-        if (steps > 0) held.bend = Math.max(held.bend ?? 0, steps)
-        else if (held.bend) held.release = true
-      }
+      bendHeld(held, n.midi)
       showPlayed(n.midi, held)
       return
     }
     const beat = Math.max(punch.value?.from ?? 0, quantize(raw, recordGrid.value))
     if (takes.value.some((t) => t.beat === beat && t.midi === n.midi)) return // même note entendue deux fois
     settleMute()
-    // Note arrivée sans nouvelle attaque depuis la précédente : slide, ou lié (hammer-on / pull-off)
-    const tech = held ? (n.slide ? 'slide' : n.legato ? 'legato' : null) : null
     const id = uid()
-    takes.value = place([...takes.value, { id, midi: n.midi, beat, raw, legato: !!n.legato, tech }])
+    takes.value = place([...takes.value, { id, midi: n.midi, beat, raw, legato: !!n.legato, tech: techAfter(held, n) }])
     holding = { id, raw, n }
     showPlayed(
       n.midi,
@@ -412,8 +395,7 @@ export function usePhraseStudio() {
       punch.value = null
       return
     }
-    past.value = [...past.value.slice(-(HISTORY_SIZE - 1)), before]
-    future.value = []
+    remember(before)
     const grid = recordGrid.value
     // Grille mixte : chaque temps reçoit sa grille, d'après les instants joués
     const placed = grid === GRID_MIX ? smartQuantize(notes.map((n) => n.raw), p.recordBpm).map((b, i) => ({ ...notes[i], beat: Math.max(0, b) })) : notes
@@ -463,17 +445,10 @@ export function usePhraseStudio() {
   function freeNote(n) {
     const t = ((n.at ?? performance.now()) - latency.value) / 1000
     const held = holding && freeOnsets.find((o) => o.id === holding.id)
-    if (n.bend) {
-      if (held) {
-        const steps = n.midi - held.midi
-        if (steps > 0) held.bend = Math.max(held.bend ?? 0, steps)
-        else if (held.bend) held.release = true
-      }
-      return
-    }
+    if (n.bend) return bendHeld(held, n.midi)
     settleMute()
     const id = uid()
-    freeOnsets.push({ id, t, midi: n.midi, legato: !!n.legato, tech: held ? (n.slide ? 'slide' : n.legato ? 'legato' : null) : null })
+    freeOnsets.push({ id, t, midi: n.midi, legato: !!n.legato, tech: techAfter(held, n) })
     freeCount.value = freeOnsets.length
     holding = { id, n }
     showPlayed(n.midi, nearestPosition(n.midi, played.value))
@@ -506,8 +481,7 @@ export function usePhraseStudio() {
       if (before) restore(before)
       return
     }
-    past.value = [...past.value.slice(-(HISTORY_SIZE - 1)), before]
-    future.value = []
+    remember(before)
     freeOnsetsKept = freeOnsets.map((o) => ({ ...o }))
     const p = phrase.value
     p.beats = metro.beats.value
@@ -617,20 +591,23 @@ export function usePhraseStudio() {
     return phrase.value.method === 'bursts' && played % 2 === 1 ? 'burst' : 'base'
   }
   const tempoFor = (kind) => (kind === 'burst' ? burstTempo(baseBpm.value, phrase.value.burst) : baseBpm.value)
+  const clampBpm = (v) => Math.min(240, Math.max(40, Math.round(Number(v) || 0)))
   // Tempo réglé par la séance (et pas à la main) : le métronome le reçoit, la surveillance ci-dessous l'ignore
   let expectedBpm = null
   function setTempo(v) {
-    expectedBpm = Math.min(240, Math.max(40, Math.round(v)))
+    expectedBpm = clampBpm(v)
     metro.setBpm(expectedBpm)
   }
 
+  /** Toutes les notes se jouent sur le manche (accordage et nombre de cases actuels). */
+  const fits = (notes) => notes.every((n) => findPositions(n.midi, tuning.value, frets.value).length)
   /** Le phrasé transposé (positions recalculées) ; s'il sort du manche, une octave plus bas ou plus haut. */
   function transposed(semis) {
     const p = phrase.value
     if (!semis) return p.notes
     for (const s of [semis, semis - 12, semis + 12]) {
       const notes = p.notes.map((n) => ({ ...n, midi: n.midi + s, locked: false }))
-      if (notes.every((n) => findPositions(n.midi, tuning.value, frets.value).length)) return place(notes)
+      if (fits(notes)) return place(notes)
     }
     return p.notes
   }
@@ -886,7 +863,6 @@ export function usePhraseStudio() {
     metro.setBpm(p.startBpm)
     streak.value = 0
   }
-  const clampBpm = (v) => Math.min(240, Math.max(40, Math.round(Number(v) || 0)))
   // Nouveau tempo de départ : la progression repart de là (et le métronome s'y règle)
   function setStartBpm(v) {
     const p = phrase.value
@@ -1170,16 +1146,6 @@ export function usePhraseStudio() {
     while (occupied(b, -1)) b = stepBeat(b, 1, p.grid)
     addNote(b, from?.string ?? null, from?.fret ?? null)
   }
-  /** Change la corde d'une note (même hauteur), en la figeant. */
-  function restring(i, string) {
-    const n = phrase.value.notes[i]
-    const fret = n.midi - tuning.value[string]
-    if (fret < 0 || fret > frets.value || string === n.string) return false
-    commit('Corde')
-    phrase.value.notes = place(phrase.value.notes.map((m, k) => (k === i ? { ...m, string, fret, locked: true } : m)))
-    selectedNote.value = phrase.value.notes.findIndex((m) => m.id === n.id)
-    return true
-  }
   function deleteNote() {
     const p = phrase.value
     commit('Suppression')
@@ -1204,7 +1170,7 @@ export function usePhraseStudio() {
   function transposePhrase(semis) {
     const p = phrase.value
     const notes = p.notes.map((n) => ({ ...n, midi: n.midi + semis, locked: false }))
-    if (!notes.every((n) => findPositions(n.midi, tuning.value, frets.value).length)) return say('Hors du manche : impossible de transposer plus loin', 'muted')
+    if (!fits(notes)) return say('Hors du manche : impossible de transposer plus loin', 'muted')
     commit('Transposition')
     p.notes = place(notes)
     say(`Transposé · départ sur ${noteName(p.notes[0].midi, notation.value)}`)
@@ -1290,8 +1256,7 @@ export function usePhraseStudio() {
     // Fin du glisser : on remet les notes dans l'ordre, on recalcule le doigté des autres, et on garde de quoi annuler
     const p = phrase.value
     const id = p.notes[selectedNote.value]?.id
-    past.value = [...past.value.slice(-(HISTORY_SIZE - 1)), before]
-    future.value = []
+    remember(before)
     p.notes = before.label === 'Corde' ? place(p.notes) : [...p.notes].sort((a, b) => a.beat - b.beat)
     p.lengthBeats = loopLength(p.notes, p.beats, p.grid)
     if (id) selectedNote.value = p.notes.findIndex((n) => n.id === id)
@@ -1397,7 +1362,6 @@ export function usePhraseStudio() {
     view.value = 'practice'
     say(`Boucle sur les notes ${spot.value.start + 1} à ${spot.value.end + 1}`)
   }
-  const dueCount = computed(() => phrases.value.filter((p) => isDue(p)).length)
 
   // ---------- Calibration du micro : une note sur chaque clic ----------
   const calibration = ref(null) // { offsets: [ms], result: { ms, spread } | null } ; null : fenêtre fermée
@@ -1501,6 +1465,7 @@ export function usePhraseStudio() {
   })
   onBeforeUnmount(() => {
     removeEventListener('keydown', onKey)
+    removeEventListener('fb:settings', reloadShared)
     stopAll()
     audio.stop()
     metro.dispose()
@@ -1546,17 +1511,13 @@ export function usePhraseStudio() {
     exportAll,
     importFile,
     importError,
-    dueCount,
-    sync,
-    syncNow,
     // moteurs (refs brutes : le métronome et l'entrée audio gardent leurs refs)
     metro: markRaw(metro),
     audio: markRaw(audio),
     // déroulé
     mode,
-    now,
+    now, // aussi lu par les tests
     clock,
-    countIn,
     counting,
     countdown,
     stopAll,
@@ -1579,19 +1540,14 @@ export function usePhraseStudio() {
     passes,
     results,
     streak,
-    baseBpm,
-    memoryLevel,
     transposeNow,
     lastAdjust,
     lastOffset,
     summary,
     toast,
-    say,
     section,
     sectionLength,
     shownPass,
-    upcoming,
-    nextTarget,
     demoPlaying,
     clickMuted,
     startPractice,
@@ -1615,9 +1571,7 @@ export function usePhraseStudio() {
     alternates,
     selectedPlayed,
     editable,
-    step,
     onFretClick,
-    restring,
     shiftPitch,
     addNote,
     addNoteAfter,
@@ -1629,7 +1583,6 @@ export function usePhraseStudio() {
     autoPlace,
     setZone,
     transposePhrase,
-    nudge,
     shiftPhrase,
     runAutoAlign,
     alignInfo,

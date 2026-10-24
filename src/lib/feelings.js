@@ -1,7 +1,7 @@
 /**
  * Sensation produite en terminant une phrase sur chaque degré (intervalle depuis la tonique, 0–11).
  * Conventions d'écoute, pas des règles : l'effet dépend aussi de l'accord joué dessous.
- * `effect` choisit l'animation du texte dans le panneau combo (voir ComboPanel.vue).
+ * `effect` choisit l'animation du texte de l'annonce combo (voir ComboAnnouncement.vue).
  */
 export const FEELINGS = [
   { degree: '1', word: 'Résolution', sub: 'retour à la maison, la phrase est conclue', effect: 'settle' },

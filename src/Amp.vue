@@ -9,17 +9,10 @@ import { DEFAULT_PRESET, PRESETS, createAmp } from './lib/ampChain'
 import { CABINETS, DEFAULT_CABINET, DEFAULT_MIC, cabinetImpulse, loadImpulse, responseCurve } from './lib/cabinets'
 import { DEFAULT_BODY_FINISH, applyAccent } from './lib/noteStyles'
 import { ampOn, soloPlayer } from './lib/ampStatus'
+import { readStored } from './lib/storage'
 
 // Même couleur d'accent que la guitare choisie sur le manche
-function stored(key, initial) {
-  try {
-    const v = localStorage.getItem(key)
-    return v === null ? initial : JSON.parse(v)
-  } catch {
-    return initial
-  }
-}
-applyAccent(stored('fb.bodyFinish', DEFAULT_BODY_FINISH))
+applyAccent(readStored('bodyFinish', DEFAULT_BODY_FINISH))
 
 const KNOBS = [
   { id: 'gate', label: 'Gate', group: 'pre' },
@@ -62,7 +55,7 @@ const vuArc = (from, to, r = 84) => {
   return `M ${p(from)} A ${r} ${r} 0 0 1 ${p(to)}`
 }
 
-const params = ref({ ...PRESETS[DEFAULT_PRESET], ...stored('fb.amp.params', {}) })
+const params = ref({ ...PRESETS[DEFAULT_PRESET], ...readStored('amp.params', {}) })
 const preset = computed(() => Object.keys(PRESETS).find((k) => KNOBS.every((kn) => PRESETS[k][kn.id] === params.value[kn.id])) ?? null)
 watch(params, (p) => {
   localStorage.setItem('fb.amp.params', JSON.stringify(p))
@@ -86,9 +79,9 @@ const outLevel = ref(0)
 const gateOpen = ref(false)
 
 // ---------- Baffle : modèle synthétique (+ micro) ou réponse impulsionnelle chargée (.wav) ----------
-const cabinet = ref(stored('fb.amp.cab', DEFAULT_CABINET)) // id de CABINETS, ou 'custom'
-const mic = ref({ ...DEFAULT_MIC, ...stored('fb.amp.mic', {}) })
-const customIr = ref(stored('fb.amp.customIr', null)) // { name, data (data URL) }
+const cabinet = ref(readStored('amp.cab', DEFAULT_CABINET)) // id de CABINETS, ou 'custom'
+const mic = ref({ ...DEFAULT_MIC, ...readStored('amp.mic', {}) })
+const customIr = ref(readStored('amp.customIr', null)) // { name, data (data URL) }
 const cabError = ref('')
 watch(cabinet, (c) => localStorage.setItem('fb.amp.cab', JSON.stringify(c)))
 watch(mic, (m) => localStorage.setItem('fb.amp.mic', JSON.stringify(m)), { deep: true })

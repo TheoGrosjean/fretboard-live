@@ -5,6 +5,7 @@
 import { computed, provide, ref } from 'vue'
 import Fretboard from './components/Fretboard.vue'
 import Icon from './components/Icon.vue'
+import ListenButton from './components/ListenButton.vue'
 import Metronome from './components/Metronome.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import CalibrationDialog from './components/phrases/CalibrationDialog.vue'
@@ -38,18 +39,7 @@ const punchText = computed(() => (s.punch ? `${beatLabel(s.punch.from, p.value.b
 
 <template>
   <Teleport v-if="s.active" defer to="#topbar-actions">
-    <button
-      class="listen-btn"
-      :class="{ on: s.audio.running.value, err: s.audio.error.value }"
-      :title="s.audio.error.value || (s.audio.running.value ? 'Arrêter l’écoute de la guitare' : 'Écouter la guitare')"
-      @click="s.audio.running.value ? s.audio.stop() : s.audio.start()"
-    >
-      <Icon name="mic" class="size-4" />
-      <span class="max-sm:hidden">{{ s.audio.running.value ? 'Écoute' : 'Écouter' }}</span>
-      <span v-if="s.audio.running.value" class="relative h-1.5 w-8 overflow-hidden rounded-full bg-white/10">
-        <span class="absolute inset-y-0 left-0 rounded-full bg-copper-400 transition-[width] duration-75" :style="{ width: s.audio.level.value * 100 + '%' }" />
-      </span>
-    </button>
+    <ListenButton :audio="s.audio" />
     <button class="gear-btn max-sm:hidden" title="Raccourcis clavier (?)" @click="s.helpOpen = true">?</button>
     <button class="gear-btn" :class="{ on: s.settingsOpen }" title="Réglages : entrée audio, guitare, affichage" @click="s.settingsOpen = !s.settingsOpen">
       <Icon name="sliders" class="size-5" />
@@ -202,22 +192,6 @@ const punchText = computed(() => (s.punch ? `${beatLabel(s.punch.from, p.value.b
 
 <style scoped>
 @reference "./style.css";
-
-.listen-btn {
-  @apply flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-neutral-300 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-white;
-}
-.listen-btn.on {
-  @apply bg-copper-500/15 text-copper-300 ring-copper-400/40;
-}
-.listen-btn.err {
-  @apply text-rose-300 ring-rose-400/40;
-}
-.gear-btn {
-  @apply flex size-9 items-center justify-center rounded-xl text-sm font-black text-neutral-400 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-white;
-}
-.gear-btn.on {
-  @apply bg-white/10 text-white;
-}
 
 /* ---------- En-tête ---------- */
 .name-input {

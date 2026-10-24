@@ -10,22 +10,15 @@ import { scaleBoxes } from './lib/boxes'
 import { FEELINGS } from './lib/feelings'
 import { pluck } from './lib/pluck'
 import { practiceRequest } from './lib/practice'
+import { readStored } from './lib/storage'
 
-function stored(key, initial) {
-  try {
-    const v = localStorage.getItem(key)
-    return v !== null ? JSON.parse(v) : initial
-  } catch {
-    return initial
-  }
-}
 // Réglages d'affichage du Manche, repris pour les manches des cours
-const notation = stored('fb.notation', 'fr')
-const bodyFinish = stored('fb.bodyFinish', undefined)
+const notation = readStored('notation', 'fr')
+const bodyFinish = readStored('bodyFinish', undefined)
 
 // ---------- Cours courant et progression ----------
-const lessonId = ref(stored('fb.theory.lesson', ALL_LESSONS[0].id))
-const done = ref(new Set(stored('fb.theory.done', [])))
+const lessonId = ref(readStored('theory.lesson', ALL_LESSONS[0].id))
+const done = ref(new Set(readStored('theory.done', [])))
 const index = computed(() => Math.max(0, ALL_LESSONS.findIndex((l) => l.id === lessonId.value)))
 const lesson = computed(() => ALL_LESSONS[index.value])
 const prev = computed(() => ALL_LESSONS[index.value - 1] ?? null)

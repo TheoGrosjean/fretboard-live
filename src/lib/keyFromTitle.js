@@ -105,6 +105,6 @@ export function keyFromTitle(rawTitle) {
 
   if (!candidates.length) return null
   const best = candidates.reduce((a, b) => (b.score > a.score ? b : a))
-  const { score, ...result } = best
+  const { score: _score, ...result } = best // le score ne sert qu’au choix
   return result
 }

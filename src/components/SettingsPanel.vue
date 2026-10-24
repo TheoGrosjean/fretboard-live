@@ -158,4 +158,19 @@ const showAlternates = defineModel('showAlternates', { type: Boolean, required: 
 .panel-title {
   @apply mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-neutral-400 uppercase;
 }
+.field {
+  @apply w-full rounded-lg bg-neutral-800 px-3 py-2 text-sm text-neutral-200 ring-1 ring-white/5 outline-none focus:ring-copper-400/60;
+}
+.field-label {
+  @apply mb-1 block text-xs text-neutral-500;
+}
+.segmented {
+  @apply grid gap-1 rounded-xl bg-neutral-800 p-1;
+}
+.segmented > button {
+  @apply rounded-lg py-1.5 text-sm font-medium text-neutral-400 transition hover:text-neutral-200;
+}
+.segmented > button.is-active {
+  @apply bg-neutral-200 text-neutral-950;
+}
 </style>
