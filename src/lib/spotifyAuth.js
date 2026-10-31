@@ -21,6 +21,16 @@ const VERIFIER_KEY = 'fb.spotify.verifier'
 export const isConfigured = Boolean(CLIENT_ID)
 export const redirectUri = REDIRECT_URI
 
+// Le lien magique des comptes (Supabase) revient lui aussi avec ?code= : le retour de Spotify est marqué
+// par state=spotify, lu et retiré de l'adresse dès le chargement (ce module est importé en premier dans main.js)
+const STATE = 'spotify'
+const returned = (() => {
+  const params = new URLSearchParams(location.search)
+  if (params.get('state') !== STATE) return null
+  history.replaceState(null, '', location.pathname + location.hash)
+  return { code: params.get('code'), error: params.get('error') }
+})()
+
 function randomString(length) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
   return Array.from(crypto.getRandomValues(new Uint8Array(length)), (b) => chars[b % chars.length]).join('')
@@ -75,6 +85,7 @@ export async function login() {
     redirect_uri: REDIRECT_URI,
     code_challenge_method: 'S256',
     code_challenge: await codeChallenge(verifier),
+    state: STATE,
   })
   location.assign(`https://accounts.spotify.com/authorize?${params}`)
 }
@@ -85,11 +96,10 @@ export function logout() {
 
 /** À appeler au chargement : échange le code reçu au retour de Spotify contre un jeton. */
 export async function handleRedirect() {
-  const params = new URLSearchParams(location.search)
-  const code = params.get('code')
-  const error = params.get('error')
+  if (!returned) return
+  const { code, error } = returned
+  returned.code = returned.error = null // un seul échange, même si le lecteur est recréé
   if (!code && !error) return
-  history.replaceState(null, '', location.pathname)
   if (error) throw new Error(error === 'access_denied' ? 'Connexion Spotify annulée.' : `Erreur Spotify : ${error}`)
 
   const verifier = localStorage.getItem(VERIFIER_KEY)
