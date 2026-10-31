@@ -29,6 +29,9 @@ const ONSET_REFRACTORY_MS = 45 // deux attaques ne sont pas plus proches
 // Palm mute : la note étouffée s'éteint vite ; 90 ms après l'attaque, elle a perdu plus de 10 dB
 const MUTE_PROBE_MS = 90
 const MUTE_DROP = 0.3
+// Juste après une attaque, la hauteur peut sortir à l'octave (sur une note étouffée, l'harmonique domine la
+// fondamentale), puis se corriger sans nouvelle attaque : ce n'est pas une nouvelle note, mais une correction
+const OCTAVE_FIX_MS = 200
 
 // Échelles en décibels : l'oreille (et le signal d'une guitare) suit une loi logarithmique
 const METER_MIN_DB = -80 // bas du vu-mètre
@@ -43,26 +46,45 @@ const meterPosition = (db) => Math.min(1, Math.max(0, (db - METER_MIN_DB) / -MET
 const thresholdDb = (sensitivity) => THRESHOLD_MAX_DB + ((THRESHOLD_MIN_DB - THRESHOLD_MAX_DB) * sensitivity) / 100
 
 /**
+ * Tailles d'analyse pour une corde la plus grave à `lowFreq` Hz :
+ * - pitchSize : fenêtre de hauteur, au moins trois périodes de la note la plus grave (la détection compare deux
+ *   périodes entières), et jamais moins de 2048 échantillons ;
+ * - bufferSize : échantillons lus à chaque trame, plus long si besoin : la recherche d'attaque remonte d'une
+ *   fenêtre de volume (une période) et de ONSET_LOOKBACK_MS, en plus des échantillons arrivés depuis la trame
+ *   précédente (une image, ~17 ms). Avec une fenêtre de 2048 seulement, les attaques n'étaient jamais vues
+ *   (deux notes identiques de suite, comme des palm mutes, n'en faisaient qu'une).
+ */
+export function analysisSizes(sampleRate, lowFreq) {
+  const pow2 = (n) => 2 ** Math.ceil(Math.log2(n))
+  const minFreq = Math.min(65, lowFreq * 0.85) // un peu de marge sous la corde à vide (accordage bas)
+  const pitchSize = pow2(Math.max(2048, (3 * sampleRate) / lowFreq))
+  const onsetNeed = (1.1 * sampleRate) / minFreq + ((ONSET_LOOKBACK_MS + 20) / 1000) * sampleRate
+  return { minFreq, pitchSize, bufferSize: pow2(Math.max(pitchSize, onsetNeed)) }
+}
+
+/**
  * Suivi d'une voix (une guitare) : détection de hauteur trame par trame, validation des notes,
  * attaques, legato et slides. `onNote` est appelé à chaque nouvelle note.
+ * bufferSize : échantillons reçus à chaque trame ; la hauteur et le volume se mesurent sur les `pitchSize` derniers.
  */
-export function createVoiceTracker({ sampleRate, bufferSize, minFreq, threshold, onNote }) {
-  const detect = createYinDetector(sampleRate, bufferSize, { minFreq })
+export function createVoiceTracker({ sampleRate, bufferSize, pitchSize = bufferSize, minFreq, threshold, onNote }) {
+  const detect = createYinDetector(sampleRate, pitchSize, { minFreq })
   // Juste après une attaque, la longue fenêtre contient encore la note précédente : la hauteur est cherchée
   // sur une fenêtre courte (un peu plus de deux périodes de la note la plus grave), prise sur les échantillons
   // les plus récents — une note étouffée (palm mute) s'éteint avant que la longue fenêtre soit propre
   const shortSize = 2 ** Math.ceil(Math.log2(Math.ceil((2.2 * sampleRate) / minFreq)))
-  const detectShort = shortSize < bufferSize ? createYinDetector(sampleRate, shortSize, { minFreq }) : null
+  const detectShort = shortSize < pitchSize ? createYinDetector(sampleRate, shortSize, { minFreq }) : null
   const shortMs = (shortSize / sampleRate) * 1000
   const block = Math.max(64, Math.round((sampleRate * ONSET_BLOCK_MS) / 1000)) // pas du suivi
   const span = Math.max(block, Math.round((sampleRate * 1.1) / minFreq)) // fenêtre du volume : une période et un peu plus
   const lookback = Math.round((sampleRate * ONSET_LOOKBACK_MS) / 1000)
-  const windowMs = (bufferSize / sampleRate) * 1000
+  const windowMs = (pitchSize / sampleRate) * 1000 // durée de la fenêtre de hauteur
   let lastFrameAt = 0
   let lastOnsetAt = -Infinity
   let pendingOnsetAt = null // instant de la dernière attaque pas encore attribuée à une note
   let pendingPeak = 0 // volume au sommet de cette attaque
   let probe = null // { note, at, peak } : mesure de l'extinction de la dernière note (palm mute)
+  let attacked = null // dernière note attaquée : { at (instant de l'attaque), emittedAt }
   let candidate = null
   let candidateCount = 0
   let candidateSince = 0
@@ -139,8 +161,8 @@ export function createVoiceTracker({ sampleRate, bufferSize, minFreq, threshold,
   /** Traite une trame ; renvoie le niveau (0–1 sur le vu-mètre) et la hauteur brute, ou null. */
   function process(buffer, now) {
     let sum = 0
-    for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i]
-    const rms = Math.sqrt(sum / buffer.length)
+    for (let i = buffer.length - pitchSize; i < buffer.length; i++) sum += buffer[i] * buffer[i]
+    const rms = Math.sqrt(sum / pitchSize)
     const level = meterPosition(toDb(rms))
 
     // Attaque : forte hausse du volume => nouvelle note même si identique (sur tranches courtes, ou à
@@ -168,7 +190,7 @@ export function createVoiceTracker({ sampleRate, bufferSize, minFreq, threshold,
       lastSoundAt = now
       return { level, freq: null, midiFloat: null } // encore trop tôt : on attend la fenêtre propre
     }
-    const result = rms > threshold() ? (fresh ? detectShort(buffer.subarray(buffer.length - shortSize)) : detect(buffer)) : null
+    const result = rms > threshold() ? (fresh ? detectShort(buffer.subarray(buffer.length - shortSize)) : detect(buffer.subarray(buffer.length - pitchSize))) : null
     if (!result) {
       if (now - lastSoundAt > RELEASE_MS) {
         current = null
@@ -202,7 +224,14 @@ export function createVoiceTracker({ sampleRate, bufferSize, minFreq, threshold,
     if (stable) {
       const isNew = !previous || previous.midi !== rounded || attackPending
       current = { midi: rounded, freq: result.freq, cents: (m - rounded) * 100 }
-      if (isNew) {
+      const jump = previous ? Math.abs(rounded - previous.midi) : 0
+      if (isNew && legato && attacked && now - attacked.emittedAt < OCTAVE_FIX_MS && (jump === 12 || jump === 24)) {
+        // Correction d'octave de la note qui vient d'être attaquée : même instant, signalée par octaveFix
+        onNote({ ...current, legato: true, slide: null, bend: null, at: attacked.at, muted: false, octaveFix: true })
+        swept = new Set([rounded])
+        glideFrames = 0
+        betweenFrames = 0
+      } else if (isNew) {
         // Grand glissé sans nouvelle attaque, en passant par les cases intermédiaires
         const slide = legato && isSlide(previous.midi, rounded, swept) ? { from: previous.midi, to: rounded } : null
         const bend = legato && !slide ? detectBend(previous.midi, rounded, now) : null
@@ -211,6 +240,7 @@ export function createVoiceTracker({ sampleRate, bufferSize, minFreq, threshold,
         const note = { ...current, legato, slide, bend, at, muted: false }
         pendingOnsetAt = null
         if (!legato && !bend) probe = { note, at, peak: Math.max(pendingPeak, rmsBefore(buffer, buffer.length)) }
+        attacked = legato ? null : { at, emittedAt: now }
         onNote(note)
         attackPending = false
         swept = new Set([rounded])
@@ -319,18 +349,14 @@ export function useAudioInput({ onNote, lowestMidi = () => 40 } = {}) {
 
       const source = ctx.createMediaStreamSource(stream)
       channelCount.value = stream.getAudioTracks()[0]?.getSettings().channelCount ?? source.channelCount
-      // Fenêtre d'analyse : au moins trois périodes de la note la plus grave (la détection a besoin de
-      // comparer deux périodes entières), et jamais moins qu'avant (2048 échantillons)
-      const lowFreq = midiToFreq(lowestMidi())
-      const fftSize = 2 ** Math.ceil(Math.log2(Math.max(2048, (3 * ctx.sampleRate) / lowFreq)))
-      const minFreq = Math.min(65, lowFreq * 0.85) // un peu de marge sous la corde à vide (accordage bas)
+      const { minFreq, pitchSize, bufferSize: fftSize } = analysisSizes(ctx.sampleRate, midiToFreq(lowestMidi()))
       nodes = [source]
       const addVoice = (player) => {
         const analyser = ctx.createAnalyser()
         analyser.fftSize = fftSize
         nodes.push(analyser)
         const emit = player === null ? (n) => onNote?.(n) : (n) => onNote?.({ ...n, player })
-        const tracker = createVoiceTracker({ sampleRate: ctx.sampleRate, bufferSize: fftSize, minFreq, threshold: () => threshold.value, onNote: emit })
+        const tracker = createVoiceTracker({ sampleRate: ctx.sampleRate, bufferSize: fftSize, pitchSize, minFreq, threshold: () => threshold.value, onNote: emit })
         voices.push({ analyser, buffer: new Float32Array(fftSize), tracker })
         return analyser
       }

@@ -366,6 +366,8 @@ watch(tuningId, () => {
 const audio = useAudioInput({
   lowestMidi: () => Math.min(...tuning.value),
   onNote: (n) => {
+    // Correction d'octave de la note qui vient d'être annoncée : même nom de note, déjà comptée (combo, jeu)
+    if (n.octaveFix) return
     // Jam « un seul joueur à la fois » : le joueur qui attend son tour est ignoré (et coupé dans l'ampli)
     if (gameOpen.value && gameRef.value?.isMuted(n.player)) return
     clearTimeout(clearTimer)

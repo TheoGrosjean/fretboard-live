@@ -5,12 +5,12 @@
  *
  * Déroulé (mode) : 'idle' | 'record' (sur le clic) | 'free' (prise libre) | 'practice' | 'listen' | 'calibrate'.
  */
-import { computed, markRaw, onActivated, onBeforeUnmount, onDeactivated, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, markRaw, onActivated, onBeforeUnmount, onDeactivated, reactive, ref, shallowRef, toRaw, watch } from 'vue'
 import { useAudioInput } from './useAudioInput'
 import { useMetronome } from './useMetronome'
 import { DEFAULT_BODY_FINISH } from '../lib/noteStyles'
 import { findPositions, findTuning, noteName } from '../lib/music'
-import { GRID_MIX, bendLabel, exportPhrases, gridStep, importPhrases, loopLength, newPhrase, noteLength, onGrid, placeNotes, powerShape, quantize, stepBeat, techOf, uid } from '../lib/phrases'
+import { GRID_MIX, bendLabel, exportPhrases, gridStep, importPhrases, loopLength, newPhrase, noteLength, onGrid, oneNotePerBeat, placeNotes, powerShape, quantize, stepBeat, techOf, uid } from '../lib/phrases'
 import { busy, flushSave, openRequest, phrases, removePhrase } from './phraseStore'
 import { autoAlign, inferRhythm, requantize, shiftAll, smartQuantize } from '../lib/phraseRhythm'
 import {
@@ -234,11 +234,33 @@ export function usePhraseStudio() {
   }
 
   function onNote(n) {
+    if (n.octaveFix) return fixOctave(n)
     if (mode.value === 'record') recordNote(n)
     else if (mode.value === 'free') freeNote(n)
     else if (mode.value === 'practice') practiceNote(n)
     else if (mode.value === 'calibrate') calibrateNote(n)
     else showPlayed(n.midi, nearestPosition(n.midi, played.value))
+  }
+
+  /** La détection corrige l'octave de la note qu'elle vient d'annoncer : on corrige cette note, sans en ajouter. */
+  function fixOctave(n) {
+    if (mode.value === 'record' || mode.value === 'free') {
+      const list = mode.value === 'free' ? freeOnsets : takes.value
+      const held = holding && list.find((t) => t.id === holding.id)
+      if (!held) return
+      held.midi = n.midi
+      if (mode.value === 'record') takes.value = place(takes.value.map((t) => (t.id === held.id ? { ...t, string: undefined, fret: undefined } : t)))
+      showPlayed(n.midi, mode.value === 'record' ? takes.value.find((t) => t.id === held.id) : nearestPosition(n.midi, played.value))
+    } else if (mode.value === 'practice') {
+      // Note déjà validée (octave tolérée) : rien à refaire ; sinon on la rejuge avec la bonne hauteur
+      if (!lastEvent || lastEvent.ok) {
+        if (lastEvent) lastEvent.midi = n.midi
+        return
+      }
+      for (const pass of passes.values()) pass.events = pass.events.filter((e) => toRaw(e) !== lastEvent) // les passages sont réactifs
+      lastHeard = null
+      practiceNote({ ...n, octaveFix: false })
+    } else if (mode.value === 'idle') showPlayed(n.midi, nearestPosition(n.midi, played.value))
   }
 
   /** Position la plus proche d'une note de repère (sinon la première jouable). */
@@ -249,7 +271,7 @@ export function usePhraseStudio() {
     const d = (p) => Math.abs(p.fret - near.fret) + Math.abs(p.string - near.string) * 0.5
     return all.reduce((best, p) => (d(p) < d(best) ? p : best))
   }
-  const place = (notes, p = phrase.value) => placeNotes(notes, tuning.value, frets.value, { zone: p?.zone ?? null })
+  const place = (notes, p = phrase.value) => placeNotes(oneNotePerBeat(notes), tuning.value, frets.value, { zone: p?.zone ?? null })
 
   // ---------- Historique des retouches (annuler / rétablir) ----------
   const past = ref([])
@@ -346,7 +368,7 @@ export function usePhraseStudio() {
       return
     }
     const beat = Math.max(punch.value?.from ?? 0, quantize(raw, recordGrid.value))
-    if (takes.value.some((t) => t.beat === beat && t.midi === n.midi)) return // même note entendue deux fois
+    if (takes.value.some((t) => Math.abs(t.beat - beat) < 1e-6)) return // une note par case (la même entendue deux fois…)
     settleMute()
     const id = uid()
     takes.value = place([...takes.value, { id, midi: n.midi, beat, raw, legato: !!n.legato, tech: techAfter(held, n) }])

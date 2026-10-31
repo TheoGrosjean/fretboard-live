@@ -76,9 +76,24 @@ export function migratePhrase(p) {
     v: PHRASE_VERSION,
   }
   delete out.auto
-  out.notes = (p.notes ?? []).map(sanitizeNote).filter(Boolean)
+  out.notes = oneNotePerBeat((p.notes ?? []).map(sanitizeNote).filter(Boolean))
   out.sessions = (p.sessions ?? []).map((s) => ({ duration: 0, maxBpm: s.bestBpm ?? 0, ...s }))
   out.updatedAt ??= out.createdAt ?? Date.now()
+  return out
+}
+
+/**
+ * Une note par instant : la détection n'entend qu'une note à la fois, deux notes au même temps sont un doublon
+ * (même attaque comptée deux fois, ou hauteur prise à l'octave puis corrigée). On garde la plus grave.
+ */
+export function oneNotePerBeat(notes) {
+  const out = []
+  for (const n of [...notes].sort((a, b) => a.beat - b.beat)) {
+    const last = out.at(-1)
+    if (last && Math.abs(last.beat - n.beat) < 1e-6) {
+      if (n.midi < last.midi) out[out.length - 1] = n
+    } else out.push(n)
+  }
   return out
 }
 
