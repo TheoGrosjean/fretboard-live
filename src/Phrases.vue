@@ -9,6 +9,7 @@ import ListenButton from './components/ListenButton.vue'
 import Metronome from './components/Metronome.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import CalibrationDialog from './components/phrases/CalibrationDialog.vue'
+import GpImportDialog from './components/phrases/GpImportDialog.vue'
 import PhraseLibrary from './components/phrases/PhraseLibrary.vue'
 import PracticePanel from './components/phrases/PracticePanel.vue'
 import ProgressPanel from './components/phrases/ProgressPanel.vue'
@@ -59,6 +60,7 @@ const punchText = computed(() => (s.punch ? `${beatLabel(s.punch.from, p.value.b
     @close="s.settingsOpen = false"
   />
   <CalibrationDialog v-if="s.calibration" />
+  <GpImportDialog v-if="s.gpFile" />
   <ShortcutsHelp v-if="s.helpOpen" />
 
   <!-- Manche replié : la page tient exactement dans l'écran (le panneau du bas défile s'il le faut) -->

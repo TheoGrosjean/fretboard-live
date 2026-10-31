@@ -1,8 +1,9 @@
 <script setup>
 // Bibliothèque des phrasés : recherche, « à revoir aujourd'hui » (révision espacée), vignette du contour
-// mélodique, maîtrise. Importer / exporter dans un fichier. Repliable en une fine colonne.
+// mélodique, maîtrise. Importer / exporter dans un fichier, importer des mesures d'une tablature Guitar Pro. Repliable en une fine colonne.
 import { computed, inject, ref } from 'vue'
 import { STUDIO_KEY } from '../../composables/usePhraseStudio'
+import { GP_ACCEPT, isGpFile } from '../../lib/gpImport'
 import { contour } from '../../lib/phrases'
 import { isDue, mastery, reviewLabel } from '../../lib/phraseCoach'
 import Icon from '../Icon.vue'
@@ -22,7 +23,8 @@ function sparkline(p) {
 }
 function onFile(e) {
   const file = e.target.files?.[0]
-  if (file) s.importFile(file)
+  if (file && isGpFile(file)) s.gpFile = file
+  else if (file) s.importFile(file)
   e.target.value = ''
 }
 </script>
@@ -84,9 +86,9 @@ function onFile(e) {
     <p v-if="query && !due.length && !rest.length" class="text-xs text-neutral-600">Aucun phrasé ne correspond.</p>
 
     <div class="mt-1 flex items-center gap-3 text-xs">
-      <button class="font-semibold text-neutral-500 hover:text-neutral-200" title="Ajouter des phrasés depuis un fichier exporté" @click="fileInput.click()">Importer…</button>
+      <button class="font-semibold text-neutral-500 hover:text-neutral-200" title="Ajouter des phrasés depuis un fichier exporté, ou depuis une tablature Guitar Pro (.gp, .gpx, .gp5…)" @click="fileInput.click()">Importer…</button>
       <button v-if="s.phrases.length" class="font-semibold text-neutral-500 hover:text-neutral-200" title="Enregistrer tous tes phrasés dans un fichier" @click="s.exportAll">Tout exporter</button>
-      <input ref="fileInput" type="file" accept=".json,application/json" class="hidden" @change="onFile" />
+      <input ref="fileInput" type="file" :accept="`.json,application/json,${GP_ACCEPT}`" class="hidden" @change="onFile" />
     </div>
     <p v-if="s.importError" class="text-xs text-rose-300">{{ s.importError }}</p>
   </aside>

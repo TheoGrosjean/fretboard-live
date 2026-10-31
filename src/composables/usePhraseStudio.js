@@ -7,7 +7,7 @@
  */
 import { computed, markRaw, onActivated, onBeforeUnmount, onDeactivated, reactive, ref, shallowRef, toRaw, watch } from 'vue'
 import { useAudioInput } from './useAudioInput'
-import { useMetronome } from './useMetronome'
+import { MAX_BPM, MIN_BPM, useMetronome } from './useMetronome'
 import { DEFAULT_BODY_FINISH } from '../lib/noteStyles'
 import { findPositions, findTuning, noteName } from '../lib/music'
 import { GRID_MIX, bendLabel, exportPhrases, gridStep, importPhrases, loopLength, newPhrase, noteLength, onGrid, oneNotePerBeat, placeNotes, powerShape, quantize, stepBeat, techOf, uid } from '../lib/phrases'
@@ -161,6 +161,24 @@ export function usePhraseStudio() {
     } catch {
       importError.value = 'Ce fichier ne contient pas de phrasés lisibles.'
     }
+  }
+  // Tablature Guitar Pro : la fenêtre d'import (choix de la piste et des mesures) est ouverte tant qu'un fichier est là
+  const gpFile = shallowRef(null)
+  /** Phrasé créé depuis les mesures choisies (lib/gpImport.phraseFromBars), ouvert à l'entraînement. */
+  function addImported(data) {
+    stopAll()
+    const p = newPhrase({ name: data.name, bpm: data.bpm, beats: data.beats, grid: data.grid })
+    const target = Math.min(MAX_BPM, Math.max(MIN_BPM, data.bpm)) // le tempo du morceau est l'objectif
+    Object.assign(p, { minBars: Math.round(data.lengthBeats / data.beats), targetBpm: target, startBpm: Math.max(MIN_BPM, Math.round((target * 0.6) / 5) * 5) })
+    p.bpm = p.startBpm
+    p.notes = place(data.notes, p)
+    fitLength(p)
+    phrases.value.unshift(p)
+    selectedId.value = p.id
+    gpFile.value = null
+    resetEditing()
+    view.value = 'practice'
+    say(`« ${p.name} » importé`)
   }
 
   // ---------- Écoute de la guitare ----------
@@ -1620,6 +1638,8 @@ export function usePhraseStudio() {
     exportAll,
     importFile,
     importError,
+    gpFile,
+    addImported,
     // moteurs (refs brutes : le métronome et l'entrée audio gardent leurs refs)
     metro: markRaw(metro),
     audio: markRaw(audio),
